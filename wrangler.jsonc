@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "time-management-db",
-      "database_id": "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID",
+      "database_id": "df904d9e-c08f-4fa0-bfb0-987d72437e81",
       "migrations_dir": "migrations"
     }
   ],
