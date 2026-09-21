@@ -388,14 +388,9 @@ function widgetSource(env, origin) { return widgetLoaderSource(env, origin, "cal
 function todayWidgetSource(env, origin) { return widgetLoaderSource(env, origin, "today"); }
 
 function userId(request, env) {
-  // On the original ChatGPT Site, Sites supplies oai-authenticated-user-id.
-  // On Cloudflare, Access supplies the authenticated email. Every allowed
-  // person uses the same shared D1 record so the web app stays in sync.
-  const accessEmail = request.headers.get("cf-access-authenticated-user-email");
-  if (accessEmail && env?.SHARED_OWNER_ID) return env.SHARED_OWNER_ID;
-  const appToken = request.headers.get("x-app-token");
-  if (env?.APP_ACCESS_TOKEN && appToken === env.APP_ACCESS_TOKEN) return env.SHARED_OWNER_ID;
-  return request.headers.get("oai-authenticated-user-id");
+  // This is intentionally a link-shared app: everyone opening the URL uses
+  // the same D1 record, so no sign-in or password prompt is required.
+  return env.SHARED_OWNER_ID || env.WIDGET_OWNER_USER_ID || "shared-calendar";
 }
 
 export default {
@@ -403,9 +398,6 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/api/widget-state") {
       if (request.method !== "GET") return json({ error: "不支援的操作。" }, 405);
-      if (!env.WIDGET_ACCESS_TOKEN || request.headers.get("x-widget-token") !== env.WIDGET_ACCESS_TOKEN) {
-        return json({ error: "Widget 權限無效。" }, 401);
-      }
       const row = await env.DB.prepare(
         "SELECT state_json, updated_at FROM user_state WHERE user_id = ?"
       ).bind(env.WIDGET_OWNER_USER_ID).first();
@@ -414,9 +406,6 @@ export default {
 
     if (url.pathname === "/api/widget-task-complete") {
       if (request.method !== "POST") return json({ error: "不支援的操作。" }, 405);
-      if (!env.WIDGET_ACCESS_TOKEN || request.headers.get("x-widget-token") !== env.WIDGET_ACCESS_TOKEN) {
-        return json({ error: "Widget 權限無效。" }, 401);
-      }
       let body;
       try { body = await request.json(); } catch { return json({ error: "資料格式不正確。" }, 400); }
       const taskId = typeof body?.id === "string" ? body.id : "";
@@ -450,26 +439,20 @@ export default {
     }
 
     if (url.pathname === "/api/widget-script") {
-      const uid = userId(request, env);
-      if (!uid || uid !== env.WIDGET_OWNER_USER_ID) return json({ error: "沒有安裝權限。" }, 403);
       return javascript(widgetSource(env, url.origin), "Time-Management-Calendar-Widget.js");
     }
 
     if (url.pathname === "/api/widget-calendar-runtime") {
       if (request.method !== "GET") return json({ error: "不支援的操作。" }, 405);
-      if (!env.WIDGET_ACCESS_TOKEN || request.headers.get("x-widget-token") !== env.WIDGET_ACCESS_TOKEN) return json({ error: "Widget 權限無效。" }, 401);
       return javascript(calendarWidgetRuntimeSource(env, url.origin), "Time-Management-Calendar-Runtime.js");
     }
 
     if (url.pathname === "/api/widget-today-script") {
-      const uid = userId(request, env);
-      if (!uid || uid !== env.WIDGET_OWNER_USER_ID) return json({ error: "沒有安裝權限。" }, 403);
       return javascript(todayWidgetSource(env, url.origin), "Time-Management-Today-Widget.js");
     }
 
     if (url.pathname === "/api/widget-today-runtime") {
       if (request.method !== "GET") return json({ error: "不支援的操作。" }, 405);
-      if (!env.WIDGET_ACCESS_TOKEN || request.headers.get("x-widget-token") !== env.WIDGET_ACCESS_TOKEN) return json({ error: "Widget 權限無效。" }, 401);
       return javascript(todayWidgetRuntimeSource(env, url.origin), "Time-Management-Today-Runtime.js");
     }
 
