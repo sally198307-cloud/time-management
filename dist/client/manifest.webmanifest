@@ -1,0 +1,24 @@
+{
+  "name": "時間管理",
+  "short_name": "時間管理",
+  "description": "整合任務、固定事項與週行程的時間管理工具",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fffaf0",
+  "theme_color": "#f2b72e",
+  "icons": [
+    {
+      "src": "/time-management-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/time-management-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
