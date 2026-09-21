@@ -155,10 +155,7 @@
   let state={events:[],tasks:[],categories:DEFAULT_CATS,taskHistory:[],memos:[]};
   const catColor=name=>(state.categories.find(c=>c.name===name)||{color:'#94a3b8'}).color;
   const STORAGE_KEY='lih-time-workbench-state-v1';
-  const ACCESS_KEY='lih-time-workbench-access-v1';
-  function accessToken(){let token=localStorage.getItem(ACCESS_KEY)||'';if(!token){token=(prompt('請輸入你和培茲的時間管理共用密碼')||'').trim();if(token)localStorage.setItem(ACCESS_KEY,token)}return token}
-  function apiHeaders(extra={}){const token=accessToken();return token?{...extra,'x-app-token':token}:extra}
-  async function apiFetch(url,options={}){const requestOptions={...options,headers:apiHeaders(options.headers||{})};let response=await fetch(url,requestOptions);if(response.status===401||response.status===403){localStorage.removeItem(ACCESS_KEY);const retryToken=accessToken();if(!retryToken)return response;requestOptions.headers=apiHeaders(options.headers||{});response=await fetch(url,requestOptions)}return response}
+  const apiFetch=(url,options={})=>fetch(url,options);
   function readLocal(){try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null}catch{return null}}
   function writeLocal(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state));return true}catch{return false}}
   const dbp=new Promise(ok=>{try{const q=indexedDB.open('lih-hub-v3',1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('data'))q.result.createObjectStore('data')};q.onsuccess=()=>ok(q.result);q.onerror=()=>ok(null);q.onblocked=()=>ok(null)}catch{ok(null)}});
