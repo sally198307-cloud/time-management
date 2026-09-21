@@ -65,7 +65,7 @@ if (action === "complete" && taskId) {
   } catch (error) {}
 }
 
-const request = new Request(API_URL);
+const request = new Request(API_URL + "?refresh=" + Date.now());
 request.headers = { "OAI-Sites-Authorization": "Bearer " + SITE_ACCESS, "X-Widget-Token": WIDGET_ACCESS };
 let payload = null, syncError = false;
 try { payload = await request.loadJSON(); } catch (error) { syncError = true; }
@@ -141,10 +141,12 @@ function addTaskColumn(parent, tasks) {
   tasks.slice(0, 3).forEach(function(task, index) {
     if (index) column.addSpacer(4);
     const row = column.addStack();
-    row.url = completeURL(task);
+    const actionURL = completeURL(task);
+    row.url = actionURL;
     row.centerAlignContent();
     row.setPadding(1, 0, 1, 0);
-    addText(row, "○", 16, GREEN, false);
+    const circle = addText(row, "○", 16, GREEN, false);
+    circle.url = actionURL;
     row.addSpacer(6);
     const copy = row.addStack();
     copy.layoutVertically();
@@ -448,7 +450,8 @@ export default {
       ).bind(env.WIDGET_OWNER_USER_ID).first();
       if (!row?.state_json) return json({ error: "找不到同步資料。" }, 404);
       const state = JSON.parse(row.state_json);
-      const task = (state.tasks || []).find((item) => item.id === taskId);
+      // 舊版任務可能使用數字 ID，Widget 網址參數則一定是文字。
+      const task = (state.tasks || []).find((item) => String(item.id) === taskId);
       if (!task) return json({ error: "找不到這個任務。" }, 404);
       if (task.daily) {
         task.completedDates = Array.isArray(task.completedDates) ? task.completedDates : [];
