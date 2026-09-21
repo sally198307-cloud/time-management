@@ -355,8 +355,39 @@ Script.complete();
     .replaceAll("__WIDGET_ACCESS__", env.WIDGET_ACCESS_TOKEN || "");
 }
 
+function courseWidgetRuntimeSource(env, origin) {
+  const source = String.raw`// 本週課表 Widget（Scriptable）
+const SITE_URL="__SITE_URL__",API_URL="__API_URL__";
+const W=329,H=345,AXIS=29,TOP=67,BOTTOM=337,PAD=5;
+const paper=new Color("#fff"),ink=new Color("#262626"),muted=new Color("#8b8b8b"),grid=new Color("#e8e8e8"),red=new Color("#ef4444");
+function pad(n){return n<10?"0"+n:String(n)}
+function ymd(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+function add(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function monday(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-(x.getDay()+6)%7);return x}
+function mins(t){const p=(t||"00:00").split(":").map(Number);return p[0]*60+p[1]}
+function course(e){return !!e.isCourse||/(課程|上課|必修|選修)/.test(e.category||"")}
+function color(name,s){const c=(s.categories||[]).find(function(x){return x.name===name});return c?c.color:"#58bfa6"}
+function text(c,v,r,size,col,bold,left){c.setFont(bold?Font.boldSystemFont(size):Font.systemFont(size));c.setTextColor(col);left?c.setTextAlignedLeft():c.setTextAlignedCenter();c.drawTextInRect(String(v),r)}
+function round(c,r,rad,col){const p=new Path();p.addRoundedRect(r,rad,rad);c.addPath(p);c.setFillColor(col);c.fillPath()}
+function layout(items){const sorted=items.slice().sort(function(a,b){return mins(a.start)-mins(b.start)}),groups=[];let group=[],end=-1;sorted.forEach(function(e){const s=mins(e.start);if(group.length&&s>=end){groups.push(group);group=[];end=-1}group.push(e);end=Math.max(end,mins(e.end))});if(group.length)groups.push(group);const out=[];groups.forEach(function(g){const ends=[];const placed=g.map(function(e){let col=ends.findIndex(function(x){return x<=mins(e.start)});if(col<0)col=ends.length;ends[col]=mins(e.end);return{event:e,column:col}});placed.forEach(function(x){x.columns=Math.max(1,ends.length);out.push(x)})});return out}
+let payload=null,error="";try{const req=new Request(API_URL);req.timeoutInterval=15;payload=await req.loadJSON();if(!payload||!payload.state)throw new Error("沒有同步資料")}catch(e){error=String(e)}
+const state=payload&&payload.state?payload.state:{events:[],tasks:[],categories:[]},now=new Date(),start=monday(now),finish=add(start,6),days=Array.from({length:7},function(_,i){return add(start,i)});
+const events=(state.events||[]).filter(function(e){return course(e)&&e.date>=ymd(start)&&e.date<=ymd(finish)}).sort(function(a,b){return a.date.localeCompare(b.date)||a.start.localeCompare(b.start)});
+const tasks=(state.tasks||[]).filter(function(t){const d=t.dueDate||t.date;const done=t.daily?(t.completedDates||[]).includes(d):!!t.done;return d&&!t.daily&&!done&&d>=ymd(start)&&d<=ymd(finish)});
+let first=8,last=18;if(events.length){first=Math.max(0,Math.floor(Math.min.apply(null,events.map(function(e){return mins(e.start)}))/60)-1);last=Math.min(24,Math.ceil(Math.max.apply(null,events.map(function(e){return mins(e.end)}))/60)+1);while(last-first<10&&last<24)last++;while(last-first<10&&first>0)first--}
+const firstMin=first*60,lastMin=last*60,total=lastMin-firstMin,gridH=BOTTOM-TOP,dayW=(W-AXIS-PAD)/7,c=new DrawContext();c.size=new Size(W,H);c.opaque=false;c.respectScreenScale=true;c.setFillColor(paper);c.fillRect(new Rect(0,0,W,H));
+text(c,"本週課表",new Rect(12,8,95,24),16,ink,true,true);text(c,error?"同步失敗":events.length+" 堂課",new Rect(108,11,100,18),9,error?new Color("#d94f55"):muted,!!error,false);text(c,"＋",new Rect(W-47,4,38,32),26,new Color("#43c98d"),false,false);
+const names=["一","二","三","四","五","六","日"];days.forEach(function(d,i){const x=AXIS+i*dayW,today=ymd(d)===ymd(now);if(today)round(c,new Rect(x+3,37,dayW-6,27),7,new Color("#fff2c0"));text(c,names[i],new Rect(x,36,dayW,13),9,today?new Color("#986900"):muted,true,false);text(c,d.getDate(),new Rect(x,49,dayW,13),8,today?new Color("#986900"):muted,false,false);if(tasks.some(function(t){return(t.dueDate||t.date)===ymd(d)})){c.setFillColor(new Color("#ef8f38"));c.fillEllipse(new Rect(x+dayW-9,38,6,6))}});
+for(let h=first;h<=last;h++){const y=TOP+((h*60-firstMin)/total)*gridH;text(c,pad(h)+":00",new Rect(0,y-6,AXIS-3,12),6.5,muted,false,false);c.setFillColor(grid);c.fillRect(new Rect(AXIS,y,W-AXIS-PAD,.6))}for(let i=0;i<=7;i++){c.setFillColor(new Color("#f1f1f1"));c.fillRect(new Rect(AXIS+i*dayW,TOP,.5,gridH))}
+days.forEach(function(d,di){layout(events.filter(function(e){return e.date===ymd(d)})).forEach(function(item){const e=item.event,s=Math.max(firstMin,mins(e.start)),end=Math.min(lastMin,mins(e.end));if(end<=s)return;const cw=dayW/item.columns,x=AXIS+di*dayW+item.column*cw+1.5,y=TOP+((s-firstMin)/total)*gridH+1,bw=cw-3,bh=Math.max(11,((end-s)/total)*gridH-2);round(c,new Rect(x,y,bw,bh),4,new Color(color(e.category,state)));text(c,e.title,new Rect(x+2,y+2,bw-4,Math.min(12,bh-2)),6.5,Color.white(),true,false);if(bh>=23)text(c,e.start,new Rect(x+2,y+13,bw-4,9),5.5,Color.white(),false,false)})});
+const ti=days.findIndex(function(d){return ymd(d)===ymd(now)}),nm=now.getHours()*60+now.getMinutes();if(ti>=0&&nm>=firstMin&&nm<=lastMin){const y=TOP+((nm-firstMin)/total)*gridH;c.setFillColor(red);c.fillRect(new Rect(AXIS,y,W-AXIS-PAD,1.5));c.fillEllipse(new Rect(AXIS-2,y-2,5,5))}
+if(!error&&!events.length)text(c,"本週尚未安排課程",new Rect(90,190,165,20),10,muted,false,false);
+const widget=new ListWidget();widget.backgroundImage=c.getImage();widget.url=SITE_URL;widget.setPadding(0,0,0,0);widget.refreshAfterDate=new Date(Date.now()+5*60*1000);Script.setWidget(widget);if(!config.runsInWidget)await widget.presentLarge();Script.complete();`;
+  return source.replaceAll("__SITE_URL__", origin).replaceAll("__API_URL__", origin + "/api/widget-state");
+}
+
 function widgetLoaderSource(env, origin, kind) {
-  const runtimePath = kind === "today" ? "/api/widget-today-runtime" : "/api/widget-calendar-runtime";
+  const runtimePath = kind === "today" ? "/api/widget-today-runtime" : (kind === "course" ? "/api/widget-course-runtime" : "/api/widget-calendar-runtime");
   return String.raw`// 時間管理 Widget 自動更新載入器（Scriptable）
 // 只需要安裝這一次；之後每次執行都會載入網站上的最新版。
 const RUNTIME_URL = "__RUNTIME_URL__";
@@ -386,6 +417,7 @@ try {
 
 function widgetSource(env, origin) { return widgetLoaderSource(env, origin, "calendar"); }
 function todayWidgetSource(env, origin) { return widgetLoaderSource(env, origin, "today"); }
+function courseWidgetSource(env, origin) { return widgetLoaderSource(env, origin, "course"); }
 
 function userId(request, env) {
   // This is intentionally a link-shared app: everyone opening the URL uses
@@ -454,6 +486,15 @@ export default {
     if (url.pathname === "/api/widget-today-runtime") {
       if (request.method !== "GET") return json({ error: "不支援的操作。" }, 405);
       return javascript(todayWidgetRuntimeSource(env, url.origin), "Time-Management-Today-Runtime.js");
+    }
+
+    if (url.pathname === "/api/widget-course-script") {
+      return javascript(courseWidgetSource(env, url.origin), "Time-Management-Weekly-Course-Widget.js");
+    }
+
+    if (url.pathname === "/api/widget-course-runtime") {
+      if (request.method !== "GET") return json({ error: "不支援的操作。" }, 405);
+      return javascript(courseWidgetRuntimeSource(env, url.origin), "Time-Management-Weekly-Course-Runtime.js");
     }
 
     if (url.pathname === "/api/state/versions") {
