@@ -393,6 +393,8 @@ function userId(request, env) {
   // person uses the same shared D1 record so the web app stays in sync.
   const accessEmail = request.headers.get("cf-access-authenticated-user-email");
   if (accessEmail && env?.SHARED_OWNER_ID) return env.SHARED_OWNER_ID;
+  const appToken = request.headers.get("x-app-token");
+  if (env?.APP_ACCESS_TOKEN && appToken === env.APP_ACCESS_TOKEN) return env.SHARED_OWNER_ID;
   return request.headers.get("oai-authenticated-user-id");
 }
 
