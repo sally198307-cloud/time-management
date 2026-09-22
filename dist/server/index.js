@@ -72,8 +72,9 @@ try { payload = await request.loadJSON(); } catch (error) { syncError = true; }
 const state = payload && payload.state ? payload.state : { events: [], tasks: [] };
 const currentMinutes = now.getHours() * 60 + now.getMinutes();
 const events = (state.events || []).filter(function(event) {
-  return event.date === today && toMinutes(event.end) > currentMinutes;
+  return event.date === today && (event.allDay || toMinutes(event.end) > currentMinutes);
 }).sort(function(a, b) {
+  if (!!a.allDay !== !!b.allDay) return a.allDay ? -1 : 1;
   return String(a.start || "00:00").localeCompare(String(b.start || "00:00"));
 });
 const pending = (state.tasks || []).filter(function(task) {
@@ -121,7 +122,8 @@ function addEventColumn(parent, events) {
     const copy = row.addStack();
     copy.layoutVertically();
     addText(copy, event.title || "未命名行程", 10.5, INK, true);
-    const detail = [(event.start || "") + (event.end ? "–" + event.end : ""), event.notes, ownerName(event.owner)].filter(Boolean).join(" · ");
+    const timeText = event.allDay ? "全天" : (event.start || "") + (event.end ? "–" + event.end : "");
+    const detail = [timeText, event.notes, ownerName(event.owner)].filter(Boolean).join(" · ");
     addText(copy, detail, 7.5, MUTED, false);
   });
   if (!events.length) {
@@ -255,6 +257,10 @@ const monthFirst = new Date(now.getFullYear(), now.getMonth(), 1);
 const calendarStart = addDays(monthFirst, -monthFirst.getDay()), calendarEnd = addDays(calendarStart, 41);
 const currentWeek = Math.max(0, Math.min(5, Math.floor(dayDiff(ymd(calendarStart), today) / 7)));
 const records = [];
+(state.events || []).forEach(function(event) {
+  if (!event.allDay || !event.date || event.date < ymd(calendarStart) || event.date > ymd(calendarEnd)) return;
+  records.push({ title: event.title || "未命名行程", start: event.date, end: event.date, color: categoryColor(event.category, state) });
+});
 (state.tasks || []).forEach(function(task) {
   if (completed(task, today)) return;
   if (task.daily) {
@@ -374,7 +380,7 @@ function round(c,r,rad,col){const p=new Path();p.addRoundedRect(r,rad,rad);c.add
 function layout(items){const sorted=items.slice().sort(function(a,b){return mins(a.start)-mins(b.start)}),groups=[];let group=[],end=-1;sorted.forEach(function(e){const s=mins(e.start);if(group.length&&s>=end){groups.push(group);group=[];end=-1}group.push(e);end=Math.max(end,mins(e.end))});if(group.length)groups.push(group);const out=[];groups.forEach(function(g){const ends=[];const placed=g.map(function(e){let col=ends.findIndex(function(x){return x<=mins(e.start)});if(col<0)col=ends.length;ends[col]=mins(e.end);return{event:e,column:col}});placed.forEach(function(x){x.columns=Math.max(1,ends.length);out.push(x)})});return out}
 let payload=null,error="";try{const req=new Request(API_URL);req.timeoutInterval=15;payload=await req.loadJSON();if(!payload||!payload.state)throw new Error("沒有同步資料")}catch(e){error=String(e)}
 const state=payload&&payload.state?payload.state:{events:[],tasks:[],categories:[]},now=new Date(),start=monday(now),finish=add(start,6),days=Array.from({length:7},function(_,i){return add(start,i)});
-const events=(state.events||[]).filter(function(e){return course(e)&&e.date>=ymd(start)&&e.date<=ymd(finish)}).sort(function(a,b){return a.date.localeCompare(b.date)||a.start.localeCompare(b.start)});
+const events=(state.events||[]).filter(function(e){return !e.allDay&&course(e)&&e.date>=ymd(start)&&e.date<=ymd(finish)}).sort(function(a,b){return a.date.localeCompare(b.date)||a.start.localeCompare(b.start)});
 const tasks=(state.tasks||[]).filter(function(t){const d=t.dueDate||t.date;const done=t.daily?(t.completedDates||[]).includes(d):!!t.done;return d&&!t.daily&&!done&&d>=ymd(start)&&d<=ymd(finish)});
 let first=8,last=18;if(events.length){first=Math.max(0,Math.floor(Math.min.apply(null,events.map(function(e){return mins(e.start)}))/60)-1);last=Math.min(24,Math.ceil(Math.max.apply(null,events.map(function(e){return mins(e.end)}))/60)+1);while(last-first<10&&last<24)last++;while(last-first<10&&first>0)first--}
 const firstMin=first*60,lastMin=last*60,total=lastMin-firstMin,gridH=BOTTOM-TOP,dayW=(W-AXIS-PAD)/7,c=new DrawContext();c.size=new Size(W,H);c.opaque=false;c.respectScreenScale=true;c.setFillColor(paper);c.fillRect(new Rect(0,0,W,H));
