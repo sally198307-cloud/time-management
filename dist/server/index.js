@@ -1,3 +1,5 @@
+import { handleAppleCalendar } from './apple-calendar.js';
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -436,6 +438,7 @@ function userId(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === '/api/apple-calendar') return handleAppleCalendar(request, env);
     if (url.pathname === "/api/widget-state") {
       if (request.method !== "GET") return json({ error: "不支援的操作。" }, 405);
       const row = await env.DB.prepare(
