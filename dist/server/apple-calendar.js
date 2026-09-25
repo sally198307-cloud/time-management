@@ -142,13 +142,15 @@ export async function handleAppleCalendar(request, env) {
   try {
     if (!cache || cache.url !== source.url || Date.now()-cache.time > 300000) {
       const response = await fetch(source.url,{redirect:'error',signal:AbortSignal.timeout(12000),headers:{accept:'text/calendar'}});
-      if (!response.ok || Number(response.headers.get('content-length'))>3000000) throw new Error('Apple 行事曆目前無法讀取');
+      if (!response.ok) throw new Error(`Apple 回應 HTTP ${response.status}`);
+      if (Number(response.headers.get('content-length'))>3000000) throw new Error('日曆內容過大');
       const ics = await response.text(); if (ics.length>3000000) throw new Error('日曆內容過大');
       cache = {url:source.url,time:Date.now(),ics};
     }
     const events = parseAppleCalendar(cache.ics,from,to);
     return new Response(JSON.stringify({configured:true,events,updatedAt:new Date(cache.time).toISOString()}),{headers:{'content-type':'application/json','cache-control':'no-store'}});
-  } catch {
-    return new Response(JSON.stringify({configured:true,events:[],error:'暫時無法讀取 Apple 行事曆，原有行程不受影響。'}),{status:502,headers:{'content-type':'application/json','cache-control':'no-store'}});
+  } catch (cause) {
+    const detail=String(cause?.message||'連線失敗').replaceAll(source.url,'[隱藏]').slice(0,90);
+    return new Response(JSON.stringify({configured:true,events:[],error:`暫時無法讀取 Apple 行事曆（${detail}），原有行程不受影響。`}),{status:502,headers:{'content-type':'application/json','cache-control':'no-store'}});
   }
 }
