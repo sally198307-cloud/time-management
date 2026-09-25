@@ -65,7 +65,7 @@ export function parseAppleCalendar(ics, from, to) {
   const overrides = new Map();
   for (const item of items) if (item['RECURRENCE-ID']) overrides.set(`${value(item,'UID')}|${value(item,'RECURRENCE-ID')}`, item);
   const output = [], fromDate = new Date(`${from}T00:00:00+08:00`), toDate = new Date(`${to}T23:59:59+08:00`);
-  function append(item, start, end, seriesKey) {
+  function append(item, start, end, seriesKey, stableKey = seriesKey) {
     if (value(item,'STATUS') === 'CANCELLED' || !start || !end || end <= start || end < fromDate || start > toDate) return;
     const dateOnly = item['DTSTART']?.[0]?.value.length === 8;
     const title = unescapeText(value(item,'SUMMARY') || '未命名行程');
@@ -76,7 +76,7 @@ export function parseAppleCalendar(ics, from, to) {
       const beginning = Math.max(start.getTime(), current.getTime()), finish = Math.min(end.getTime(), current.getTime() + 86400000);
       const startLabel = dateOnly ? '00:00' : uiTime(new Date(beginning));
       const endLabel = dateOnly ? '23:59' : finish === current.getTime() + 86400000 ? '24:00' : uiTime(new Date(finish));
-      output.push({ sourceId: `${value(item,'UID')}|${seriesKey}|${day}`, date: day, title, start: startLabel, end: endLabel, allDay: dateOnly, owner: 'peizi', category: '培茲', notes: unescapeText(value(item,'DESCRIPTION')).slice(0,500), source: 'apple' });
+      output.push({ sourceId: `${value(item,'UID')}|${seriesKey}|${day}`, stableId: `${value(item,'UID')}|${stableKey}|${i}`, seriesUid: value(item,'UID'), date: day, title, start: startLabel, end: endLabel, allDay: dateOnly, owner: 'peizi', category: '培茲', notes: unescapeText(value(item,'DESCRIPTION')).slice(0,500), source: 'apple' });
     }
   }
   for (const item of items) {
@@ -107,7 +107,7 @@ export function parseAppleCalendar(ics, from, to) {
         const changedStart = readDate(value(override,'DTSTART'),override['DTSTART']?.[0]?.zone)?.instant;
         const changedEnd = readDate(value(override,'DTEND'),override['DTEND']?.[0]?.zone)?.instant;
         append(override, changedStart, changedEnd || (changedStart && new Date(changedStart.getTime()+duration)), occurrence.local);
-      } else if (!possible.some(k => exclude.has(k))) append(item, occurrence.start, new Date(occurrence.start.getTime()+duration), occurrence.local);
+      } else if (!possible.some(k => exclude.has(k))) append(item, occurrence.start, new Date(occurrence.start.getTime()+duration), occurrence.local, rule ? occurrence.local : 'single');
     }
   }
   // A moved occurrence can fall in the visible range when its original date is outside it.
