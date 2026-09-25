@@ -141,7 +141,14 @@ export async function handleAppleCalendar(request, env) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from || (Date.parse(to)-Date.parse(from))>370*86400000) return new Response('日期範圍不正確', { status:400 });
   try {
     if (!cache || cache.url !== source.url || Date.now()-cache.time > 300000) {
-      const response = await fetch(source.url,{redirect:'error',signal:AbortSignal.timeout(12000),headers:{accept:'text/calendar'}});
+      let target=source.url, response;
+      for (let attempt=0;attempt<3;attempt++) {
+        response=await fetch(target,{redirect:'manual',signal:AbortSignal.timeout(12000),headers:{accept:'text/calendar'}});
+        if (![301,302,303,307,308].includes(response.status)) break;
+        const next=new URL(response.headers.get('location')||'',target);
+        if (next.protocol!=='https:'||!/^p\d+-caldav\.icloud\.com$/i.test(next.hostname)||!next.pathname.startsWith('/published/2/')) throw new Error('Apple 回傳無法驗證的轉址');
+        target=next.href;
+      }
       if (!response.ok) throw new Error(`Apple 回應 HTTP ${response.status}`);
       if (Number(response.headers.get('content-length'))>3000000) throw new Error('日曆內容過大');
       const ics = await response.text(); if (ics.length>3000000) throw new Error('日曆內容過大');
