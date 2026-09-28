@@ -426,7 +426,7 @@
     }return total;
   }
   function renderEisenhower(){
-    const nowStamp=Date.now(),items=[];state.tasks.filter(t=>!taskDone(t)).forEach(t=>items.push({key:`task:${t.id}`,title:t.title,date:t.dueDate||'',priority:t.priority,action:()=>open('task',t.id)}));
+    const nowStamp=Date.now(),items=[];state.tasks.filter(t=>!taskDone(t)).forEach(t=>items.push({key:`task:${t.id}`,title:t.title,date:t.daily?ymd(new Date()):t.dueDate||'',priority:t.priority,action:()=>open('task',t.id)}));
     state.events.filter(e=>e.isExam&&e.date>=ymd(new Date())).forEach(e=>items.push({key:`exam:${e.id}`,title:`準備考試｜${e.title}`,date:e.date,priority:'medium',action:()=>openAIPlanner(e.id)}));
     state.events.filter(e=>(e.subtasks||[]).some(sub=>!sub.done&&String(sub.title||'').trim())).forEach(e=>(e.subtasks||[]).forEach((sub,i)=>{if(!sub.done&&String(sub.title||'').trim())items.push({key:`sub:${e.id}:${sub.id||i}`,title:`${e.title}｜${sub.title}`,date:e.date,priority:'normal',action:()=>openEventDetails(e.id)})}));
     state.matrixPrefs=state.matrixPrefs||{};const groups=[[],[],[],[]];for(const item of items){const pref=state.matrixPrefs[item.key]||{},important=pref.important??['high','medium'].includes(item.priority),urgent=pref.urgent??(item.date?new Date(item.date+'T23:59:59').getTime()-nowStamp<=72*36e5:false),index=important?(urgent?0:1):(urgent?2:3);groups[index].push({...item,important,urgent})}
