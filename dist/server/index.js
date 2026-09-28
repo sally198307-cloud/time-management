@@ -48,8 +48,8 @@ function cleanText(value, max = 500) {
 }
 
 function fallbackStudyPlan(input) {
-  const difficultyHours = { easy: 4, medium: 7, hard: 11 };
-  const familiarityFactor = { 1: 1.35, 2: 1.2, 3: 1, 4: 0.82, 5: 0.68 };
+  const difficultyHours = { very_easy: 2.5, easy: 4, medium: 7, hard: 11, very_hard: 15 };
+  const familiarityFactor = { 1: 1.35, 2: 1.2, 3: 1, 4: 0.82, 5: 0.68, 6: 0.55, 7: 0.45 };
   const daysFactor = input.daysLeft <= 2 ? 0.8 : input.daysLeft <= 5 ? 0.92 : 1;
   const total = Math.max(120, Math.round((difficultyHours[input.difficulty] || 7) * 60 * (familiarityFactor[input.familiarity] || 1) * daysFactor / 15) * 15);
   const topics = cleanText(input.scope, 1000).split(/[\n、,，；;]/).map((item) => item.trim()).filter(Boolean).slice(0, 5);
@@ -106,15 +106,15 @@ async function handleStudyPlan(request, env) {
     title: cleanText(body?.title, 80),
     scope: cleanText(body?.scope, 1200),
     notes: cleanText(body?.notes, 500),
-    familiarity: clamp(body?.familiarity, 1, 5),
-    difficulty: ["easy", "medium", "hard"].includes(body?.difficulty) ? body.difficulty : "medium",
+    familiarity: clamp(body?.familiarity, 1, 7),
+    difficulty: ["very_easy", "easy", "medium", "hard", "very_hard"].includes(body?.difficulty) ? body.difficulty : "medium",
     target: cleanText(body?.target, 60) || "確實掌握並完成考試",
     daysLeft: Math.round(clamp(body?.daysLeft, 0, 365)),
   };
   if (!input.title) return json({ error: "缺少考試名稱。" }, 400);
   const fallback = fallbackStudyPlan(input);
   if (!env.AI) return json({ plan: fallback, source: "basic" });
-  const prompt = `請為大學生拆解考試準備工作。只決定學習步驟與合理估時，不安排日期或時段。\n考試：${input.title}\n剩餘天數：${input.daysLeft}\n考試範圍：${input.scope || "尚未填寫，請以通用準備流程規劃"}\n補充：${input.notes || "無"}\n熟悉程度：${input.familiarity}/5\n難度：${input.difficulty}\n目標：${input.target}\n每一步需明確、可以實際勾選完成；分鐘數使用 15 分鐘的倍數。\n只回傳 JSON，不要 Markdown 或說明文字。格式：{"summary":"簡短策略","estimatedMinutes":整數,"steps":[{"title":"步驟名稱","minutes":整數,"note":"完成標準"}]}`;
+  const prompt = `請為大學生拆解考試準備工作。只決定學習步驟與合理估時，不安排日期或時段。\n考試：${input.title}\n剩餘天數：${input.daysLeft}\n考試範圍：${input.scope || "尚未填寫，請以通用準備流程規劃"}\n補充：${input.notes || "無"}\n熟悉程度：${input.familiarity}/7\n難度：${input.difficulty}\n目標：${input.target}\n每一步需明確、可以實際勾選完成；分鐘數使用 15 分鐘的倍數。\n只回傳 JSON，不要 Markdown 或說明文字。格式：{"summary":"簡短策略","estimatedMinutes":整數,"steps":[{"title":"步驟名稱","minutes":整數,"note":"完成標準"}]}`;
   try {
     const result = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
       messages: [
