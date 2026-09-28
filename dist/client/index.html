@@ -347,7 +347,7 @@
   const minutesText=minutes=>minutes>=60?`${Math.floor(minutes/60)} 小時${minutes%60?` ${minutes%60} 分鐘`:''}`:`${minutes} 分鐘`;
   const examSubjectName=title=>title.replace(/(?:第(?:\d+|[一二三四五六七八九十]+)次)?(?:期中|期末)?(?:小考|上機考|考試|考|測驗|書面報告|報告|專題(?:提案|成果報告)?)$/,'').trim()||title;
   function currentAIPlan(examId){return state.aiPlans.find(plan=>String(plan.examId)===String(examId))}
-  function aiPlanBusyEvents(examId,replaceExamIds=[examId]){const replaceIds=new Set(replaceExamIds.map(String)),replaceTaskIds=new Set(state.tasks.filter(t=>replaceIds.has(String(t.aiExamId))&&!taskDone(t)).map(t=>String(t.id)));return state.events.filter(e=>!e.allDay&&e.owner!=='peizi'&&!replaceTaskIds.has(String(e.aiTaskId)))}
+  function aiPlanBusyEvents(){return state.events.filter(e=>!e.allDay&&e.owner!=='peizi')}
   function scheduleAIStudy(exam,steps,sessionLength,dailyLimit,options={}){
     const live=new Date(),today=parse(ymd(live)),examDay=parse(exam.date),lastDay=exam.allDay?add(examDay,-1):examDay,sessions=[],work=steps.map((step,index)=>({...step,index,remaining:Math.max(15,Math.round(Number(step.minutes||30)/15)*15)})),reserved=options.reserved||[],busyEvents=[...(options.busyEvents||aiPlanBusyEvents(exam.id)),...reserved.map(s=>({date:s.date,start:s.start,end:s.end}))];let stepIndex=0;
     for(let day=new Date(today);day<=lastDay&&stepIndex<work.length;day=add(day,1)){
