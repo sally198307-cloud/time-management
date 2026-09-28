@@ -17,6 +17,9 @@
       "migrations_dir": "migrations"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "vars": {
     "SHARED_OWNER_ID": "shared-calendar",
     "WIDGET_OWNER_USER_ID": "shared-calendar"
