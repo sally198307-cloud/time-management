@@ -18,14 +18,117 @@ function javascript(source, filename = "Time-Management-Widget.js", status = 200
   });
 }
 
-function todayWidgetRuntimeSource(env, origin) {
+const STUDY_PLAN_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    estimatedMinutes: { type: "integer", minimum: 30, maximum: 6000 },
+    steps: {
+      type: "array",
+      minItems: 2,
+      maxItems: 16,
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          minutes: { type: "integer", minimum: 15, maximum: 600 },
+          note: { type: "string" },
+        },
+        required: ["title", "minutes", "note"],
+      },
+    },
+  },
+  required: ["summary", "estimatedMinutes", "steps"],
+};
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, Number(value) || min));
+}
+
+function cleanText(value, max = 500) {
+  return String(value || "").trim().slice(0, max);
+}
+
+function fallbackStudyPlan(input) {
+  const difficultyHours = { easy: 4, medium: 7, hard: 11 };
+  const familiarityFactor = { 1: 1.35, 2: 1.2, 3: 1, 4: 0.82, 5: 0.68 };
+  const daysFactor = input.daysLeft <= 2 ? 0.8 : input.daysLeft <= 5 ? 0.92 : 1;
+  const total = Math.max(120, Math.round((difficultyHours[input.difficulty] || 7) * 60 * (familiarityFactor[input.familiarity] || 1) * daysFactor / 15) * 15);
+  const topics = cleanText(input.scope, 1000).split(/[\n、,，；;]/).map((item) => item.trim()).filter(Boolean).slice(0, 5);
+  const phases = topics.length ? topics.map((topic) => `理解與整理：${topic}`) : ["整理考試範圍與重點", "理解核心觀念", "題目練習"];
+  phases.push("錯題整理與加強", "考前總複習");
+  const weights = phases.map((_, index) => index === phases.length - 1 ? 0.14 : index === phases.length - 2 ? 0.18 : 0.68 / Math.max(1, phases.length - 2));
+  const steps = phases.map((title, index) => ({
+    title,
+    minutes: Math.max(30, Math.round(total * weights[index] / 15) * 15),
+    note: index === phases.length - 1 ? "快速回顧重點與容易出錯的地方" : index === phases.length - 2 ? "重做錯題並標記仍不熟悉的內容" : "完成後留下簡短筆記或練習紀錄",
+  }));
+  const adjustedTotal = steps.reduce((sum, step) => sum + step.minutes, 0);
+  return {
+    summary: `依照熟悉程度、難度與剩餘 ${Math.max(0, input.daysLeft)} 天，先建立可調整的準備計畫。`,
+    estimatedMinutes: adjustedTotal,
+    steps,
+  };
+}
+
+function normalizeStudyPlan(plan, fallback) {
+  const steps = Array.isArray(plan?.steps) ? plan.steps.map((step) => ({
+    title: cleanText(step?.title, 80),
+    minutes: Math.round(clamp(step?.minutes, 15, 600) / 15) * 15,
+    note: cleanText(step?.note, 160),
+  })).filter((step) => step.title).slice(0, 16) : [];
+  if (steps.length < 2) return fallback;
+  return {
+    summary: cleanText(plan.summary, 300) || fallback.summary,
+    estimatedMinutes: steps.reduce((sum, step) => sum + step.minutes, 0),
+    steps,
+  };
+}
+
+async function handleStudyPlan(request, env) {
+  if (request.method !== "POST") return json({ error: "不支援的操作。" }, 405);
+  const origin = request.headers.get("Origin");
+  if (origin && origin !== new URL(request.url).origin) return json({ error: "不允許跨網站使用。" }, 403);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "資料格式不正確。" }, 400); }
+  const input = {
+    title: cleanText(body?.title, 80),
+    scope: cleanText(body?.scope, 1200),
+    notes: cleanText(body?.notes, 500),
+    familiarity: clamp(body?.familiarity, 1, 5),
+    difficulty: ["easy", "medium", "hard"].includes(body?.difficulty) ? body.difficulty : "medium",
+    target: cleanText(body?.target, 60) || "確實掌握並完成考試",
+    daysLeft: Math.round(clamp(body?.daysLeft, 0, 365)),
+  };
+  if (!input.title) return json({ error: "缺少考試名稱。" }, 400);
+  const fallback = fallbackStudyPlan(input);
+  if (!env.AI) return json({ plan: fallback, source: "basic" });
+  const prompt = `請為大學生拆解考試準備工作。只決定學習步驟與合理估時，不安排日期或時段。\n考試：${input.title}\n剩餘天數：${input.daysLeft}\n考試範圍：${input.scope || "尚未填寫，請以通用準備流程規劃"}\n補充：${input.notes || "無"}\n熟悉程度：${input.familiarity}/5\n難度：${input.difficulty}\n目標：${input.target}\n每一步需明確、可以實際勾選完成；分鐘數使用 15 分鐘的倍數。`;
+  try {
+    const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      messages: [
+        { role: "system", content: "你是務實的大學生讀書規劃助理。使用繁體中文，避免空泛建議，不排入行事曆、不虛構教材章節。" },
+        { role: "user", content: prompt },
+      ],
+      response_format: { type: "json_schema", json_schema: STUDY_PLAN_SCHEMA },
+      max_tokens: 1200,
+      temperature: 0.25,
+    });
+    const raw = result?.response ?? result?.choices?.[0]?.message?.content;
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return json({ plan: normalizeStudyPlan(parsed, fallback), source: "ai" });
+  } catch (error) {
+    console.error("study plan AI failed", error);
+    return json({ plan: fallback, source: "basic", warning: "AI 暫時無法回應，已改用基本規則產生。" });
+  }
+}
+
+function todayWidgetRuntimeSource(_env, origin) {
   const source = String.raw`// 今日行程＋我的代辦 Widget（Scriptable）
 // 由「時間管理」網站產生；請勿把這份程式碼分享給其他人。
 const SITE_URL = "__SITE_URL__";
 const API_URL = "__API_URL__";
 const COMPLETE_URL = "__COMPLETE_URL__";
-const SITE_ACCESS = "__SITE_ACCESS__";
-const WIDGET_ACCESS = "__WIDGET_ACCESS__";
 
 const PAPER = new Color("#ffffff"), INK = new Color("#202020"), MUTED = new Color("#8b8b8f");
 const BLUE = new Color("#2488e8"), GREEN = new Color("#42c987"), GRID = new Color("#e8e8ec");
@@ -56,11 +159,7 @@ if (action === "complete" && taskId) {
   try {
     const completeRequest = new Request(COMPLETE_URL);
     completeRequest.method = "POST";
-    completeRequest.headers = {
-      "OAI-Sites-Authorization": "Bearer " + SITE_ACCESS,
-      "X-Widget-Token": WIDGET_ACCESS,
-      "Content-Type": "application/json"
-    };
+    completeRequest.headers = { "Content-Type": "application/json" };
     completeRequest.body = JSON.stringify({ id: taskId, date: args.queryParameters.date || today });
     const result = await completeRequest.loadJSON();
     actionSucceeded = !!(result && result.ok);
@@ -68,7 +167,6 @@ if (action === "complete" && taskId) {
 }
 
 const request = new Request(API_URL + "?refresh=" + Date.now());
-request.headers = { "OAI-Sites-Authorization": "Bearer " + SITE_ACCESS, "X-Widget-Token": WIDGET_ACCESS };
 let payload = null, syncError = false;
 try { payload = await request.loadJSON(); } catch (error) { syncError = true; }
 const state = payload && payload.state ? payload.state : { events: [], tasks: [] };
@@ -188,18 +286,14 @@ Script.complete();
   return source
     .replaceAll("__SITE_URL__", origin)
     .replaceAll("__API_URL__", origin + "/api/widget-state")
-    .replaceAll("__COMPLETE_URL__", origin + "/api/widget-task-complete")
-    .replaceAll("__SITE_ACCESS__", env.WIDGET_SITE_ACCESS || "")
-    .replaceAll("__WIDGET_ACCESS__", env.WIDGET_ACCESS_TOKEN || "");
+    .replaceAll("__COMPLETE_URL__", origin + "/api/widget-task-complete");
 }
 
-function calendarWidgetRuntimeSource(env, origin) {
+function calendarWidgetRuntimeSource(_env, origin) {
   const source = String.raw`// 時間管理主畫面 Widget（Scriptable）
 // 由「時間管理」網站產生；請勿把這份程式碼分享給其他人。
 const SITE_URL = "__SITE_URL__";
 const API_URL = "__API_URL__";
-const SITE_ACCESS = "__SITE_ACCESS__";
-const WIDGET_ACCESS = "__WIDGET_ACCESS__";
 
 const WIDTH = 329, HEIGHT = 345, SIDE = 10, HEADER = 68;
 const CELL_WIDTH = (WIDTH - SIDE * 2) / 7;
@@ -250,7 +344,6 @@ function splitWeeks(item, calendarStart) {
 }
 
 const request = new Request(API_URL);
-request.headers = { "OAI-Sites-Authorization": "Bearer " + SITE_ACCESS, "X-Widget-Token": WIDGET_ACCESS };
 let payload = null, syncError = false;
 try { payload = await request.loadJSON(); } catch (error) { syncError = true; }
 const state = payload && payload.state ? payload.state : { events: [], tasks: [], categories: [] };
@@ -360,9 +453,7 @@ Script.complete();
 `;
   return source
     .replaceAll("__SITE_URL__", origin)
-    .replaceAll("__API_URL__", origin + "/api/widget-state")
-    .replaceAll("__SITE_ACCESS__", env.WIDGET_SITE_ACCESS || "")
-    .replaceAll("__WIDGET_ACCESS__", env.WIDGET_ACCESS_TOKEN || "");
+    .replaceAll("__API_URL__", origin + "/api/widget-state");
 }
 
 function courseWidgetRuntimeSource(env, origin) {
@@ -396,16 +487,13 @@ const widget=new ListWidget();widget.backgroundImage=c.getImage();widget.url=SIT
   return source.replaceAll("__SITE_URL__", origin).replaceAll("__API_URL__", origin + "/api/widget-state");
 }
 
-function widgetLoaderSource(env, origin, kind) {
+function widgetLoaderSource(_env, origin, kind) {
   const runtimePath = kind === "today" ? "/api/widget-today-runtime" : (kind === "course" ? "/api/widget-course-runtime" : "/api/widget-calendar-runtime");
   return String.raw`// 時間管理 Widget 自動更新載入器（Scriptable）
 // 只需要安裝這一次；之後每次執行都會載入網站上的最新版。
 const RUNTIME_URL = "__RUNTIME_URL__";
-const SITE_ACCESS = "__SITE_ACCESS__";
-const WIDGET_ACCESS = "__WIDGET_ACCESS__";
 try {
   const request = new Request(RUNTIME_URL);
-  request.headers = { "OAI-Sites-Authorization": "Bearer " + SITE_ACCESS, "X-Widget-Token": WIDGET_ACCESS };
   const latestCode = await request.loadString();
   await eval("(async function(){\n" + latestCode + "\n})()");
 } catch (error) {
@@ -420,9 +508,7 @@ try {
   if (!config.runsInWidget) await widget.presentMedium();
   Script.complete();
 }`
-    .replaceAll("__RUNTIME_URL__", origin + runtimePath)
-    .replaceAll("__SITE_ACCESS__", env.WIDGET_SITE_ACCESS || "")
-    .replaceAll("__WIDGET_ACCESS__", env.WIDGET_ACCESS_TOKEN || "");
+    .replaceAll("__RUNTIME_URL__", origin + runtimePath);
 }
 
 function widgetSource(env, origin) { return widgetLoaderSource(env, origin, "calendar"); }
@@ -439,6 +525,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/apple-calendar') return handleAppleCalendar(request, env);
+    if (url.pathname === '/api/ai/study-plan') return handleStudyPlan(request, env);
     if (url.pathname === "/api/widget-state") {
       if (request.method !== "GET") return json({ error: "不支援的操作。" }, 405);
       const row = await env.DB.prepare(
