@@ -108,7 +108,12 @@ async function handleStudyPlan(request, env) {
     return json({ plan: normalizeStudyPlan(parsed, fallback), source: "ai" });
   } catch (error) {
     console.error("study plan AI failed", error);
-    return json({ plan: fallback, source: "basic", warning: "AI 暫時無法回應，已改用基本規則產生。" });
+    return json({
+      plan: fallback,
+      source: "basic",
+      warning: "AI 暫時無法回應，已改用基本規則產生。",
+      diagnostic: cleanText(error?.message || error, 180),
+    });
   }
 }
 
