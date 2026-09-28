@@ -18,29 +18,6 @@ function javascript(source, filename = "Time-Management-Widget.js", status = 200
   });
 }
 
-const STUDY_PLAN_SCHEMA = {
-  type: "object",
-  properties: {
-    summary: { type: "string" },
-    estimatedMinutes: { type: "integer", minimum: 30, maximum: 6000 },
-    steps: {
-      type: "array",
-      minItems: 2,
-      maxItems: 16,
-      items: {
-        type: "object",
-        properties: {
-          title: { type: "string" },
-          minutes: { type: "integer", minimum: 15, maximum: 600 },
-          note: { type: "string" },
-        },
-        required: ["title", "minutes", "note"],
-      },
-    },
-  },
-  required: ["summary", "estimatedMinutes", "steps"],
-};
-
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Number(value) || min));
 }
@@ -85,6 +62,19 @@ function normalizeStudyPlan(plan, fallback) {
   };
 }
 
+function parseStudyPlanResponse(raw) {
+  if (raw && typeof raw === "object") return raw;
+  const text = String(raw || "").trim();
+  if (!text) throw new Error("AI did not return content");
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = (fenced ? fenced[1] : text).trim();
+  try { return JSON.parse(candidate); } catch {}
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start >= 0 && end > start) return JSON.parse(candidate.slice(start, end + 1));
+  throw new Error("AI response was not valid JSON");
+}
+
 async function handleStudyPlan(request, env) {
   if (request.method !== "POST") return json({ error: "不支援的操作。" }, 405);
   const origin = request.headers.get("Origin");
@@ -103,19 +93,18 @@ async function handleStudyPlan(request, env) {
   if (!input.title) return json({ error: "缺少考試名稱。" }, 400);
   const fallback = fallbackStudyPlan(input);
   if (!env.AI) return json({ plan: fallback, source: "basic" });
-  const prompt = `請為大學生拆解考試準備工作。只決定學習步驟與合理估時，不安排日期或時段。\n考試：${input.title}\n剩餘天數：${input.daysLeft}\n考試範圍：${input.scope || "尚未填寫，請以通用準備流程規劃"}\n補充：${input.notes || "無"}\n熟悉程度：${input.familiarity}/5\n難度：${input.difficulty}\n目標：${input.target}\n每一步需明確、可以實際勾選完成；分鐘數使用 15 分鐘的倍數。`;
+  const prompt = `請為大學生拆解考試準備工作。只決定學習步驟與合理估時，不安排日期或時段。\n考試：${input.title}\n剩餘天數：${input.daysLeft}\n考試範圍：${input.scope || "尚未填寫，請以通用準備流程規劃"}\n補充：${input.notes || "無"}\n熟悉程度：${input.familiarity}/5\n難度：${input.difficulty}\n目標：${input.target}\n每一步需明確、可以實際勾選完成；分鐘數使用 15 分鐘的倍數。\n只回傳 JSON，不要 Markdown 或說明文字。格式：{"summary":"簡短策略","estimatedMinutes":整數,"steps":[{"title":"步驟名稱","minutes":整數,"note":"完成標準"}]}`;
   try {
     const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
       messages: [
         { role: "system", content: "你是務實的大學生讀書規劃助理。使用繁體中文，避免空泛建議，不排入行事曆、不虛構教材章節。" },
         { role: "user", content: prompt },
       ],
-      response_format: { type: "json_schema", json_schema: STUDY_PLAN_SCHEMA },
-      max_tokens: 1200,
+      max_tokens: 1600,
       temperature: 0.25,
     });
     const raw = result?.response ?? result?.choices?.[0]?.message?.content;
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const parsed = parseStudyPlanResponse(raw);
     return json({ plan: normalizeStudyPlan(parsed, fallback), source: "ai" });
   } catch (error) {
     console.error("study plan AI failed", error);
