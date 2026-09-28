@@ -95,7 +95,7 @@ async function handleStudyPlan(request, env) {
   if (!env.AI) return json({ plan: fallback, source: "basic" });
   const prompt = `請為大學生拆解考試準備工作。只決定學習步驟與合理估時，不安排日期或時段。\n考試：${input.title}\n剩餘天數：${input.daysLeft}\n考試範圍：${input.scope || "尚未填寫，請以通用準備流程規劃"}\n補充：${input.notes || "無"}\n熟悉程度：${input.familiarity}/5\n難度：${input.difficulty}\n目標：${input.target}\n每一步需明確、可以實際勾選完成；分鐘數使用 15 分鐘的倍數。\n只回傳 JSON，不要 Markdown 或說明文字。格式：{"summary":"簡短策略","estimatedMinutes":整數,"steps":[{"title":"步驟名稱","minutes":整數,"note":"完成標準"}]}`;
   try {
-    const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+    const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fp8-fast", {
       messages: [
         { role: "system", content: "你是務實的大學生讀書規劃助理。使用繁體中文，避免空泛建議，不排入行事曆、不虛構教材章節。" },
         { role: "user", content: prompt },
@@ -108,12 +108,7 @@ async function handleStudyPlan(request, env) {
     return json({ plan: normalizeStudyPlan(parsed, fallback), source: "ai" });
   } catch (error) {
     console.error("study plan AI failed", error);
-    return json({
-      plan: fallback,
-      source: "basic",
-      warning: "AI 暫時無法回應，已改用基本規則產生。",
-      diagnostic: cleanText(error?.message || error, 180),
-    });
+    return json({ plan: fallback, source: "basic", warning: "AI 暫時無法回應，已改用基本規則產生。" });
   }
 }
 
