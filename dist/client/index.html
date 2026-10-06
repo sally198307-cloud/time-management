@@ -215,7 +215,24 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
 
 
 <dialog id="tronDialog"><div class="modal" style="width:min(960px,94vw);max-height:90vh;overflow:auto"><div class="modal-head"><div><h2>TronClass 課務匯入</h2><div class="history-note">手動更新 · 確認後才會加入任務／考試</div></div><button class="close" id="tronClose" aria-label="關閉">×</button></div>
-<details open><summary>貼上作業清單</summary><p>在東吳 TronClass 開啟「課程 → 作業」，複製整頁文字後貼到下方。只辨識有完整起訖時間的項目；公告、附件及未顯示日期的「已結束」項目不會自動辨識。</p><a href="https://tronclass.scu.edu.tw/" target="_blank" rel="noopener noreferrer">開啟東吳 TronClass ↗</a>
+<details id="tronSafariHelp"><summary>iPhone／iPad：設定 Safari 分享匯入</summary>
+<p>設定一次後，在 TronClass 作業頁按「分享 → 傳到時間管理」，即可帶入本頁文字。這是手動觸發的分享匯入，不會在背景自動同步。</p>
+<ol><li>開啟 Apple「捷徑」，新增捷徑並命名為「傳到時間管理」。</li><li>在捷徑詳細設定開啟「在分享表單中顯示」，接收類型選「Safari 網頁」。</li><li>加入「在網頁上執行 JavaScript」，輸入使用「捷徑輸入」，刪除預設程式並貼上下方內容。</li><li>在下一步加入「打開 URL」，輸入使用上一步的 JavaScript 結果。</li><li>在 Safari 登入 TronClass，開啟「課程 → 作業」並等內容載入，按分享，選「傳到時間管理」。第一次執行時依 Apple 提示允許。</li></ol>
+<label>捷徑使用的程式碼<textarea id="tronSafariCode" readonly rows="8" style="width:100%;font-size:14px">// 從 Safari 的 TronClass 作業頁分享執行
+if (location.hostname !== "tronclass.scu.edu.tw" || document.querySelector('input[type="password"]')) {
+  throw new Error("請先在 Safari 登入東吳 TronClass，開啟課程的作業清單。");
+}
+const text = document.body.innerText.trim();
+if (!/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(text)) {
+  throw new Error("這頁沒有完整日期時間，請開啟課程的作業清單後再分享。");
+}
+if (text.length &gt; 20000) {
+  throw new Error("頁面內容太多，請縮小作業清單範圍後再分享。");
+}
+completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
+  encodeURIComponent(JSON.stringify({v:1,source:"tronclass.scu.edu.tw",text:text})));</textarea></label><button type="button" class="btn" id="tronCopySafari">複製捷徑程式碼</button><p id="tronSafariStatus" role="status"></p>
+<p class="history-note">分享會把目前頁面的可見文字帶到時間管理網站；不讀取密碼或登入憑證。請只在作業清單執行。每次只讀取已載入的這一頁；其他科目、分頁及附件內的日期需另外處理。</p></details>
+<details open><summary>確認分享內容／貼上作業清單</summary><p>在東吳 TronClass 開啟「課程 → 作業」，複製整頁文字後貼到下方。只辨識有完整起訖時間的項目；公告、附件及未顯示日期的「已結束」項目不會自動辨識。</p><a href="https://tronclass.scu.edu.tw/" target="_blank" rel="noopener noreferrer">開啟東吳 TronClass ↗</a>
 <label>科目名稱<input id="tronCourse" maxlength="120" placeholder="例如：計算機程式設計"></label><label>作業頁文字<textarea id="tronText" rows="7" placeholder="貼上包含作業名稱、時間與繳交狀態的文字"></textarea></label><button class="btn" id="tronParse">辨識並加入待確認清單</button><p id="tronMessage" role="status"></p></details>
 <div class="tron-toolbar"><button class="btn" id="tronSelectAll">選取可加入項目</button><button class="btn" id="tronClear">取消選取</button><button class="btn primary" id="tronAdd">加入選取項目</button><button class="btn" id="tronSkip">略過選取項目</button></div><div id="tronReview"></div><p class="history-note">已繳交不等於你的任務已完成；本次匯入不會自動改變完成紀錄。來源日期更新時會要求確認，並保留你改過的名稱與分類。</p></div></dialog>
 
@@ -808,7 +825,35 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
     }await save();render();$('#tronMessage').textContent='已加入／更新 '+chosen.length+' 項。可以在「我的任務」或「考試」查看。';
   };
 
-  setInterval(updateNowLines,10000);setInterval(()=>{renderExams();renderStudyDesk()},60000);setInterval(renderUrgent,60000);setInterval(loadAppleCalendar,300000);setInterval(checkTaskReminders,30000);load().then(()=>{checkTaskReminders();loadAppleCalendar()});
+
+  $('#tronCopySafari').onclick=async()=>{
+    try{await navigator.clipboard.writeText($('#tronSafariCode').value);$('#tronSafariStatus').textContent='已複製，請貼到捷徑的 JavaScript 動作。'}
+    catch(e){$('#tronSafariCode').focus();$('#tronSafariCode').select();$('#tronSafariStatus').textContent='請長按程式碼並選取全部、複製。'}
+  };
+  function decodeTronShare(fragment){
+    if(!fragment.startsWith('#tron-share='))return null;
+    if(fragment.length>190000)throw new Error('分享內容過長，請縮小作業清單範圍。');
+    const payload=JSON.parse(decodeURIComponent(fragment.slice(12)));
+    if(payload.v!==1||payload.source!=='tronclass.scu.edu.tw'||typeof payload.text!=='string'||!payload.text.trim()||payload.text.length>20000)throw new Error('分享內容格式不正確，請從 TronClass 作業頁重新分享。');
+    return payload.text;
+  }
+  // 先清除網址片段，再等待既有資料載入；原始文字不自動儲存。
+  let tronSharedText=null,tronShareError='';
+  if(location.hash.startsWith('#tron-share=')){
+    try{tronSharedText=decodeTronShare(location.hash)}catch(e){tronShareError=e.message}
+    history.replaceState(null,'',location.pathname+location.search);
+  }
+  function receiveTronShare(){
+    if(tronSharedText===null&&!tronShareError)return;
+    openTron();
+    if(tronShareError){$('#tronMessage').textContent=tronShareError;return}
+    $('#tronText').value=tronSharedText;
+    $('#tronCourse').value='';
+    $('#tronMessage').textContent='已接收 Safari 分享內容。請填寫科目名稱，再按「辨識並加入待確認清單」核對；尚未新增任務。';
+    $('#tronCourse').focus();tronSharedText=null;
+  }
+
+  setInterval(updateNowLines,10000);setInterval(()=>{renderExams();renderStudyDesk()},60000);setInterval(renderUrgent,60000);setInterval(loadAppleCalendar,300000);setInterval(checkTaskReminders,30000);load().then(()=>{checkTaskReminders();loadAppleCalendar();receiveTronShare()});
 })();
 </script>
 </body></html>
