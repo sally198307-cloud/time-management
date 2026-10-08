@@ -129,6 +129,7 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
 .subject-progressbar{height:9px;background:#eeeade;border-radius:10px;overflow:hidden;margin:14px 0}.subject-progressbar span{display:block;height:100%;background:#64ac94}.subject-progress-item{display:flex;align-items:flex-start;gap:10px;border:1px solid #ece5d3;border-radius:12px;padding:13px;margin-top:10px;background:white}.subject-progress-item input{width:21px;height:21px;flex-shrink:0;margin-top:2px;accent-color:#5aab8b}.subject-progress-copy{flex:1;min-width:0}.subject-progress-copy strong{display:block;font-size:16px;overflow-wrap:anywhere}.subject-progress-copy small{color:#8c8472;display:block;margin-top:5px;line-height:1.5}.subject-progress-item.is-done strong{text-decoration:line-through;color:#8b897e}.subject-progress-item .btn{padding:6px 9px;font-size:13px}.subject-add-progress{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}.subject-add-progress input,.subject-link select{padding:10px;border:1px solid #ddd5bf;border-radius:9px;font-size:15px;min-width:0}.subject-add-progress input[type=text]{flex:1;min-width:150px}.subject-link{border-top:1px solid #eee5d3;margin-top:18px;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap}.subject-link select{flex:1;min-width:180px}.subject-empty{padding:34px;text-align:center;color:#8a806b}.subject-settings input,.subject-settings textarea{width:100%}.subject-mini-actions{display:flex;gap:6px}.subject-bonus{display:flex;align-items:center;gap:10px;margin-top:16px;font-size:14px}.subject-bonus input{width:85px;padding:8px;border:1px solid #ded8c8;border-radius:8px}.subject-heading h2{margin:0;font-size:25px}.subject-heading p{margin:7px 0;color:#8b8270}
 @media(max-width:1000px){.subject-layout{grid-template-columns:1fr}.subject-summary{gap:8px}.subject-stat{padding:12px}.subject-stat strong{font-size:22px}}@media(max-width:600px){.subject-panel{padding:15px}.subject-summary{grid-template-columns:1fr}.subject-stat{display:flex;align-items:center;justify-content:space-between}.subject-stat strong{margin:0}.subject-grade-row{grid-template-columns:minmax(0,1fr) 75px 68px}.subject-toolbar{align-items:flex-start}.subject-tab{padding:12px 14px}}
 
+.subject-progress-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:155px}@media(max-width:600px){.subject-progress-item{flex-wrap:wrap}.subject-progress-actions{max-width:none;width:100%}}
 </style>
 </head>
 <body class="today-mode">
@@ -448,7 +449,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     return {earned,knownWeight,totalWeight,bonus,remaining,valid,required};
   }
   function selectedSubject(){return (state.subjects||[]).find(s=>String(s.id)===String(activeSubjectId))}
-  function subjectProgressDone(item){if(item.taskId){const t=state.tasks.find(t=>String(t.id)===String(item.taskId));return t?taskDone(t):false}return !!item.done}
+  function subjectProgressDone(item){return !!item.done}
   function openSubject(id=null){
     const subject=(state.subjects||[]).find(s=>String(s.id)===String(id));
     editingSubjectId=subject?.id||null;
@@ -467,6 +468,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
   }
   function renderSubjects(){
     state.subjects=Array.isArray(state.subjects)?state.subjects:[];
+    for(const subject of state.subjects)for(const p of subject.progress||[]){if(p.taskId){const task=state.tasks.find(t=>String(t.id)===String(p.taskId));if(task){p.title=task.title;p.date=p.date||task.dueDate||'';p.done=taskDone(task)}delete p.taskId}}
     if(!selectedSubject())activeSubjectId=state.subjects[0]?.id||null;
     $('#subjectTabs').innerHTML=state.subjects.map(s=>{
       const summary=subjectGradeSummary(s),progress=s.progress||[],completed=progress.filter(subjectProgressDone).length;
@@ -495,14 +497,15 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
       '<label class="subject-bonus">已確認的額外加分<input id="subjectBonus" type="number" min="0" max="100" step="0.1" value="'+subjectEsc(subject.bonus||0)+'" aria-label="已確認的額外加分">分</label><p class="page-sub">只填老師已確認的加分，規則不會自動觸發。</p>'+
       (subject.notes?'<div class="subject-rules"><strong>評分與免考規則</strong><br>'+subjectEsc(subject.notes)+'</div>':'')+
       '</section><section class="card subject-panel"><div class="subject-panel-head"><h3>讀書進度</h3><span>'+completed+' / '+progress.length+' 完成</span></div><div class="subject-progressbar"><span style="width:'+percent+'%"></span></div>'+
+
       progress.map(p=>{
-        const task=p.taskId?state.tasks.find(t=>String(t.id)===String(p.taskId)):null,done=subjectProgressDone(p);
-        return '<div class="subject-progress-item '+(done?'is-done':'')+'"><input type="checkbox" data-progress-check="'+subjectEsc(p.id)+'" '+(done?'checked':'')+' '+(p.taskId&&!task?'disabled':'')+' aria-label="完成'+subjectEsc(task?.title||p.title)+'"><div class="subject-progress-copy"><strong>'+subjectEsc(task?.title||p.title)+'</strong><small>'+subjectEsc(p.taskId?(task?'已連結我的任務'+(task.dueDate?' · '+task.dueDate+' 截止':''):'原任務已刪除，請解除連結或移除此項'):(p.date?p.date+' 預計完成':'自行追蹤的讀書事項'))+'</small></div>'+(!p.taskId?'<button type="button" class="btn" data-progress-edit="'+subjectEsc(p.id)+'">編輯</button>':'')+'<button type="button" class="btn" data-progress-delete="'+subjectEsc(p.id)+'" aria-label="移除此進度項目">×</button></div>';
-      }).join('')+(!progress.length?'<div class="subject-empty">加入章節、複習或練習事項，也可以連結現有任務。</div>':'')+
-      '<form class="subject-add-progress" id="subjectProgressForm"><input id="subjectProgressTitle" type="text" maxlength="200" required placeholder="例如：複習 if / else"><input id="subjectProgressDate" type="date" aria-label="預計完成日期"><button class="btn primary" type="submit">新增</button></form>'+
-      '<form class="subject-link" id="subjectLinkForm"><select id="subjectLinkTask" aria-label="選擇要連結的任務"><option value="">連結現有任務…</option>'+state.tasks.filter(t=>!t.daily&&!progress.some(p=>String(p.taskId)===String(t.id))).map(t=>'<option value="'+subjectEsc(t.id)+'">'+subjectEsc(t.title)+(t.dueDate?' · '+subjectEsc(t.dueDate):'')+'</option>').join('')+'</select><button type="submit" class="btn">連結</button></form><p class="page-sub">連結的任務在這裡勾選，也會同步更新「我的任務」。移除連結會保留原任務。讀書進度不會直接改動成績。</p></section></div>';
+        const done=subjectProgressDone(p);
+        return '<div class="subject-progress-item '+(done?'is-done':'')+'"><input type="checkbox" data-progress-check="'+subjectEsc(p.id)+'" '+(done?'checked':'')+' aria-label="完成'+subjectEsc(p.title)+'"><div class="subject-progress-copy"><strong>'+subjectEsc(p.title)+'</strong><small>'+subjectEsc(p.date?p.date+' 預計完成':'自行追蹤的讀書事項')+'</small></div><div class="subject-progress-actions"><button type="button" class="btn" data-progress-task="'+subjectEsc(p.id)+'">加入任務</button><button type="button" class="btn" data-progress-edit="'+subjectEsc(p.id)+'">編輯</button><button type="button" class="btn" data-progress-delete="'+subjectEsc(p.id)+'" aria-label="移除此進度項目">×</button></div></div>';
+      }).join('')+(!progress.length?'<div class="subject-empty">直接寫下章節、複習或練習事項。<br>需要安排時，再選擇「加入任務」。</div>':'')+
+      '<form class="subject-add-progress" id="subjectProgressForm"><input id="subjectProgressTitle" type="text" maxlength="200" required placeholder="自己輸入讀書進度，例如：複習 if / else"><input id="subjectProgressDate" type="date" aria-label="預計完成日期"><button class="btn primary" type="submit">新增進度</button></form>'+
+      '<p class="page-sub">新增後只保存在本科進度。「加入任務」會開啟新增視窗，讓你修改名稱、日期與提醒，按儲存才會加入。兩邊的完成狀態各自管理。</p></section></div>';
     $('#subjectEdit').onclick=()=>openSubject(subject.id);
-    $('#subjectDelete').onclick=async()=>{if(!confirm('刪除「'+subject.name+'」的成績與讀書進度？已連結的原任務會保留。'))return;state.subjects=state.subjects.filter(s=>s!==subject);activeSubjectId=null;await save();render()};
+    $('#subjectDelete').onclick=async()=>{if(!confirm('刪除「'+subject.name+'」的成績與讀書進度？已加入的任務會保留。'))return;state.subjects=state.subjects.filter(s=>s!==subject);activeSubjectId=null;await save();render()};
     $('#subjectGroupAdd').onclick=()=>openSubjectGroup();
     detail.querySelectorAll('[data-group-edit]').forEach(b=>b.onclick=()=>openSubjectGroup(b.dataset.groupEdit));
     detail.querySelectorAll('[data-group-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('刪除這個評分項目及其中的成績？'))return;subject.groups=subject.groups.filter(g=>String(g.id)!==b.dataset.groupDelete);await save();renderSubjects()});
@@ -513,10 +516,10 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     $('#subjectBonus').onchange=async e=>{if(!e.target.checkValidity()){e.target.reportValidity();return}subject.bonus=Number(e.target.value)||0;await save();renderSubjects()};
     detail.querySelectorAll('[data-progress-check]').forEach(box=>box.onchange=async()=>{
       const p=subject.progress.find(p=>String(p.id)===box.dataset.progressCheck);
-      if(p.taskId){const task=state.tasks.find(t=>String(t.id)===String(p.taskId));if(task)task.done=box.checked}else p.done=box.checked;
+      p.done=box.checked;
       await save();render();
     });
-    detail.querySelectorAll('[data-progress-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('移除這個進度項目？連結的原任務會保留。'))return;subject.progress=subject.progress.filter(p=>String(p.id)!==b.dataset.progressDelete);await save();renderSubjects()});
+    detail.querySelectorAll('[data-progress-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('移除這個進度項目？已加入的任務會保留。'))return;subject.progress=subject.progress.filter(p=>String(p.id)!==b.dataset.progressDelete);await save();renderSubjects()});
     detail.querySelectorAll('[data-progress-edit]').forEach(b=>b.onclick=async()=>{
       const p=subject.progress.find(p=>String(p.id)===b.dataset.progressEdit),title=prompt('修改讀書事項',p.title);if(title===null||!title.trim())return;
       const date=prompt('預計完成日期（YYYY-MM-DD，可留空）',p.date||'');if(date===null)return;
@@ -524,7 +527,14 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
       p.title=title.trim().slice(0,200);p.date=date;await save();renderSubjects();
     });
     $('#subjectProgressForm').onsubmit=async e=>{e.preventDefault();const title=$('#subjectProgressTitle').value.trim();if(!title)return;subject.progress=subject.progress||[];subject.progress.push({id:uid(),title,date:$('#subjectProgressDate').value,done:false});await save();renderSubjects()};
-    $('#subjectLinkForm').onsubmit=async e=>{e.preventDefault();const task=state.tasks.find(t=>String(t.id)===$('#subjectLinkTask').value);if(!task)return;subject.progress=subject.progress||[];if(subject.progress.some(p=>String(p.taskId)===String(task.id)))return;subject.progress.push({id:uid(),taskId:task.id,title:task.title});await save();renderSubjects()};
+
+    detail.querySelectorAll('[data-progress-task]').forEach(button=>button.onclick=()=>{
+      const p=subject.progress.find(p=>String(p.id)===button.dataset.progressTask);if(!p)return;
+      open('task');$('#title').value=subject.name+'｜'+p.title;
+      if(state.categories.some(c=>c.name==='學科練習'))$('#category').value='學科練習';
+      $('#date').value=p.date||ymd(new Date());$('#hasDeadline').checked=!!p.date;$('#dueDate').value=p.date||ymd(new Date());$('#dueTime').value='23:59';syncDeadlineFields();
+    });
+
   }
   $('#subjectAdd').onclick=()=>openSubject();
   $('#subjectCancel').onclick=()=>$('#subjectDialog').close();$('#subjectGroupCancel').onclick=()=>$('#subjectGroupDialog').close();
