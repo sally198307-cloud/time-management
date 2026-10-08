@@ -176,7 +176,7 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
     
 <div class="view" data-page="subjects" hidden>
 <section class="card page-card">
-<div class="subject-toolbar"><div><h2>學科管理</h2><p class="page-sub">每科分開查看，成績與讀書進度放在一起。</p></div><div class="subject-mini-actions"><button class="btn" id="subjectSeed" type="button">加入截圖中的兩科</button><button class="btn primary" id="subjectAdd" type="button">＋ 新增學科</button></div></div>
+<div class="subject-toolbar"><div><h2>學科管理</h2><p class="page-sub">每科分開查看，成績與讀書進度放在一起。</p></div><div class="subject-mini-actions"><button class="btn" id="subjectSeed" type="button">加入已提供的學科資料</button><button class="btn primary" id="subjectAdd" type="button">＋ 新增學科</button></div></div>
 <div class="subject-tabs" id="subjectTabs" aria-label="選擇學科"></div><div id="subjectDetail"></div>
 </section></div>
 
@@ -526,7 +526,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     }).join('');
     $('#subjectTabs').querySelectorAll('[data-subject-id]').forEach(b=>b.onclick=()=>{activeSubjectId=b.dataset.subjectId;renderSubjects()});
     const subject=selectedSubject(),detail=$('#subjectDetail');
-    if(!subject){detail.innerHTML='<div class="subject-empty">先新增學科，或按「加入截圖中的兩科」。<br>每科的分數、比重與進度都會分開保存。</div>';return}
+    if(!subject){detail.innerHTML='<div class="subject-empty">先新增學科，或按「加入已提供的學科資料」。<br>每科的分數、比重與進度都會分開保存。</div>';return}
     const summary=subjectGradeSummary(subject),progress=subject.progress||[],completed=progress.filter(subjectProgressDone).length;
     const percent=progress.length?Math.round(completed/progress.length*100):0;
     const targetText=subjectTargetText(subject,summary);
@@ -619,10 +619,11 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     state.subjects=state.subjects||[];
     const makeGroup=(name,weight,count=1,scores=[])=>({id:uid(),name,weight,entries:Array.from({length:count},(_,i)=>({score:scores[i]??null}))});
     const examples=[
+      {...{"name":"資訊管理","target":85,"bonus":0,"notes":"依提供的課程大綱：上課討論 15%（上課發言成績）、學期考 44%（含期中與期末考）、分組作業 6%、期中專題報告 13%、期末專題報告 22%，合計 100%。\n期中與期末考各自占比未載明，請確認後再拆分；目前學期考欄位填合併成績，不代表單次考試分數。\n讀書進度依大綱日期建立，未自動標示已完成。12/24 大綱標示放假，不列為讀書事項；實際日期以老師公告為準。\n1/14 書面報告是否計入期末專題報告，請依老師說明確認。"},groups:[makeGroup('上課討論',15),makeGroup('學期考（期中＋期末合計）',44),makeGroup('分組作業',6),makeGroup('期中專題報告',13),makeGroup('期末專題報告',22)],progress:[["2026-09-17","Introduction"],["2026-09-24","Information and Information System: Data and Decision"],["2026-10-01","Information and Information System: Organizational Processes"],["2026-10-08","Information and Information System"],["2026-10-15","Information and Information System"],["2026-10-22","Data Modeling"],["2026-10-29","Business Process"],["2026-11-05","期中報告"],["2026-11-12","期中考"],["2026-11-19","ERP"],["2026-11-26","ERP"],["2026-12-03","Business Intelligence"],["2026-12-10","Artificial Intelligence"],["2026-12-17","Artificial Intelligence"],["2026-12-31","期末考"],["2027-01-07","期末報告"],["2027-01-14","書面報告"]].map(([date,title])=>({id:uid(),date,title,done:false}))},
       {name:'專業 office 套裝軟體',target:85,bonus:0,progress:[],groups:[makeGroup('PPT',15),makeGroup('Word',20),makeGroup('Excel',25),makeGroup('學期考試',30),makeGroup('其他（請核對比重）',10)],notes:'依截圖記錄：其他「10+」（課堂回答、練習作業、筆記作業），暫以 10% 記錄，請確認「+」的加分規則。\n請假／缺席 ≤ 3 次，且每次測驗 ≥ 70 分：學期成績 +5（需老師確認後再填額外加分）。\nWord + Excel「大約等於 70」可不用出席 12/31 考試；計算方式與門檻須向老師確認。'},
       {name:'PHP 與 MySQL 資料庫程式初探',target:85,bonus:0,progress:[],groups:[makeGroup('每週測驗',10,10,[0,100]),makeGroup('分組報告',20),makeGroup('平時討論區回應',10),makeGroup('平時作業',40,4)],notes:'每週測驗共 10 次，截圖記錄第 1 次 0 分、第 2 次 100 分。\n目前可清楚辨識的評分比重共 80%；底部剩餘項目被遮住，請補齊後再試算目標。所有分數以老師公布為準。'}
     ];
-    const added=examples.filter(s=>!state.subjects.some(old=>old.name===s.name));if(!added.length){alert('這兩科已加入，原有資料會保留。');return}
+    const added=examples.filter(s=>!state.subjects.some(old=>old.name===s.name));if(!added.length){alert('已提供的學科皆已加入，原有資料會保留。');return}
     for(const s of added){s.id=uid();state.subjects.push(s)}activeSubjectId=added[0].id;await save();renderSubjects();
   };
 
