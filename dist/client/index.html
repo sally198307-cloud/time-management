@@ -259,7 +259,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
 
 
 <dialog id="subjectDialog"><form class="modal subject-settings" id="subjectForm"><h2 id="subjectDialogTitle">新增學科</h2><label>學科名稱<input id="subjectName" maxlength="100" required></label><label>目標學期成績（0–100）<input id="subjectTarget" type="number" min="0" max="100" step="0.1" value="80" required></label><label>評分規則、加分與免考條件<textarea id="subjectNotes" rows="5" maxlength="4000"></textarea></label><div class="modal-actions"><button class="btn" type="button" id="subjectCancel">取消</button><button class="btn primary" type="submit">儲存學科</button></div></form></dialog>
-<dialog id="subjectGroupDialog"><form class="modal subject-settings" id="subjectGroupForm"><h2 id="subjectGroupTitle">新增評分項目</h2><label>名稱<input id="subjectGroupName" required maxlength="100" placeholder="例如：每週測驗"></label><label>占學期成績比重（%）<input id="subjectGroupWeight" type="number" min="0" max="100" step="0.1" required></label><label>總次數（各次等比重）<input id="subjectGroupCount" type="number" min="1" max="100" step="1" required value="1"></label><p class="page-sub">例如測驗共 10 次、合計占 10%，每次占學期成績 1%。尚未公布請留空；確定得到 0 分時才填 0。</p><div class="modal-actions"><button class="btn" type="button" id="subjectGroupCancel">取消</button><button class="btn primary" type="submit">儲存評分項目</button></div></form></dialog>
+<dialog id="subjectGroupDialog"><form class="modal subject-settings" id="subjectGroupForm"><h2 id="subjectGroupTitle">新增評分項目</h2><label>名稱<input id="subjectGroupName" required maxlength="100" placeholder="例如：每週測驗"></label><label>占學期成績比重（%）<input id="subjectGroupWeight" type="number" min="0" max="100" step="0.1" required></label><label>總次數（各次等比重）<input id="subjectGroupCount" type="number" min="1" max="100" step="1" required value="1"></label><label>採計方式<select id="subjectGroupSelection"><option value="all">全部採計</option><option value="best">取最高幾次</option></select></label><label id="subjectGroupTakeField" hidden>採計次數<input id="subjectGroupTakeCount" type="number" min="1" max="100" step="1" value="1"></label><p class="page-sub">例如總次數 4、採計 3：只取最高 3 次的平均，再乘這個項目的比重。未公布請留空；0 分請填 0。成績未填齊時顯示暫計結果。</p><div class="modal-actions"><button class="btn" type="button" id="subjectGroupCancel">取消</button><button class="btn primary" type="submit">儲存評分項目</button></div></form></dialog>
 
 <script>
 (()=>{
@@ -431,22 +431,35 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
 
   let activeSubjectId=null,editingSubjectId=null,editingSubjectGroupId=null;
   const subjectNumber=n=>Math.round((Number(n)||0)*100)/100;
+
+  function subjectGroupResult(group){
+    const entries=group.entries||[],count=entries.length,weight=Number(group.weight)||0;
+    const best=group.selection==='best',take=best?Math.max(1,Math.min(count,Number(group.takeCount)||count)):count;
+    const scored=entries.map((e,index)=>({index,score:e.score===null||e.score===undefined||e.score===''?null:Number(e.score)})).filter(e=>e.score!==null&&Number.isFinite(e.score)&&e.score>=0&&e.score<=100);
+    const selected=(best?[...scored].sort((a,b)=>b.score-a.score||a.index-b.index):scored).slice(0,take);
+    const selectedIds=new Set(selected.map(e=>e.index)),scoredIds=new Set(scored.map(e=>e.index));
+    const earned=take?selected.reduce((sum,e)=>sum+e.score/100*weight/take,0):0;
+    return {best,take,earned,knownWeight:take?selected.length/take*weight:0,pending:count-scored.length,selectedIds,scoredIds};
+  }
+  function subjectGroupCaption(group,result=subjectGroupResult(group)){
+    return '占 '+group.weight+'%'+(result.best?' · '+group.entries.length+' 取 '+result.take+'（最高分）':'')+' · '+(result.best&&result.pending?'暫計 ':'已得 ')+subjectNumber(result.earned)+' 分';
+  }
+  function subjectScoreCaption(group,index,result=subjectGroupResult(group)){
+    if(!result.best)return '占 '+subjectNumber(Number(group.weight)/(group.entries||[]).length)+'%';
+    if(!result.scoredIds.has(index))return '待公布';
+    return result.selectedIds.has(index)?(result.pending?'暫採計':'採計'):'不採計';
+  }
+
   function subjectGradeSummary(subject){
-    let earned=0,knownWeight=0,totalWeight=0;
+    let earned=0,knownWeight=0,totalWeight=0,bestPending=0;
     for(const group of subject.groups||[]){
-      const weight=Number(group.weight)||0,entries=group.entries||[];
-      totalWeight+=weight;
-      for(const entry of entries){
-        if(entry.score===null||entry.score===undefined||entry.score==='')continue;
-        const score=Number(entry.score);
-        if(!Number.isFinite(score)||score<0||score>100||!entries.length)continue;
-        knownWeight+=weight/entries.length;
-        earned+=score/100*weight/entries.length;
-      }
+      const result=subjectGroupResult(group);
+      totalWeight+=Number(group.weight)||0;knownWeight+=result.knownWeight;earned+=result.earned;
+      if(result.best)bestPending+=result.pending;
     }
     const bonus=Number(subject.bonus)||0,remaining=Math.max(0,100-knownWeight),valid=Math.abs(totalWeight-100)<0.001;
     const required=valid&&remaining>0?((Number(subject.target)||0)-earned-bonus)/remaining*100:null;
-    return {earned,knownWeight,totalWeight,bonus,remaining,valid,required};
+    return {earned,knownWeight,totalWeight,bonus,remaining,valid,required,bestPending};
   }
   function selectedSubject(){return (state.subjects||[]).find(s=>String(s.id)===String(activeSubjectId))}
   function subjectProgressDone(item){return !!item.done}
@@ -463,13 +476,14 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     const subject=selectedSubject();if(!subject)return;
     const group=(subject.groups||[]).find(g=>String(g.id)===String(id));editingSubjectGroupId=group?.id||null;
     $('#subjectGroupTitle').textContent=group?'編輯評分項目':'新增評分項目';
-    $('#subjectGroupName').value=group?.name||'';$('#subjectGroupWeight').value=group?.weight??'';$('#subjectGroupCount').value=group?.entries?.length||1;
+    $('#subjectGroupName').value=group?.name||'';$('#subjectGroupWeight').value=group?.weight??'';$('#subjectGroupCount').value=group?.entries?.length||1;$('#subjectGroupSelection').value=group?.selection||'all';$('#subjectGroupTakeCount').value=group?.takeCount||group?.entries?.length||1;syncSubjectGradeSelection();
     $('#subjectGroupDialog').showModal();$('#subjectGroupName').focus();
   }
 
   function subjectTargetText(subject,summary){
     let targetText='';
     if(!summary.valid)targetText='目前比重合計 '+subjectNumber(summary.totalWeight)+'%，請補齊至 100% 後再計算目標。';
+    else if(summary.bestPending)targetText='擇優採計尚有 '+summary.bestPending+' 次成績未公布，目前暫計 '+subjectNumber(summary.earned+summary.bonus)+' 分；新成績可替換較低分，待全部公布後再確認學期結果。目標 '+subject.target+' 分。';
     else if(summary.remaining===0)targetText='所有評分已填齊。學期試算 '+subjectNumber(summary.earned+summary.bonus)+' 分'+(summary.earned+summary.bonus>=subject.target?'，已達目標。':'，尚未達目標。');
     else if(summary.required<=0)targetText='目前已達目標 '+subject.target+' 分；剩餘評分仍可繼續累積。';
     else if(summary.required>100)targetText='若無額外加分，剩餘評分全拿 100 分仍不足以達到目標 '+subject.target+' 分。';
@@ -485,8 +499,9 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     if(notice)notice.innerHTML=subjectEsc(subjectTargetText(subject,summary))+'<br>空白代表尚未公布；「已取得分數」不是目前考試的平均分數。';
     root.querySelectorAll('[data-subject-grade-group]').forEach(el=>{
       const group=subject.groups.find(g=>String(g.id)===el.dataset.subjectGradeGroup);if(!group)return;
-      const entries=group.entries||[],earned=entries.reduce((sum,e)=>sum+(e.score!==null&&e.score!==undefined&&e.score!==''?Number(e.score)/100*Number(group.weight)/entries.length:0),0);
-      el.querySelector('.subject-group-head .page-sub').textContent='占 '+group.weight+'% · 已得 '+subjectNumber(earned)+' 分';
+      const result=subjectGroupResult(group);
+      el.querySelector('.subject-group-head .page-sub').textContent=subjectGroupCaption(group,result);
+      el.querySelectorAll('[data-score-caption]').forEach(label=>label.textContent=subjectScoreCaption(group,Number(label.dataset.scoreCaption),result));
     });
     $('#subjectTabs').querySelectorAll('[data-subject-id]').forEach(tab=>{
       if(tab.dataset.subjectId!==String(subject.id))return;
@@ -519,9 +534,9 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
       '<div class="subject-summary"><div class="subject-stat"><strong>'+subjectNumber(summary.earned+summary.bonus)+' 分</strong><span>已取得加權分數（含確認加分）</span></div><div class="subject-stat"><strong>'+subjectNumber(summary.knownWeight)+'%</strong><span>已公布成績的比重</span></div><div class="subject-stat"><strong>'+percent+'%</strong><span>讀書事項完成 '+completed+'/'+progress.length+'</span></div></div>'+
       '<div class="subject-layout"><section class="card subject-panel"><div class="subject-panel-head"><h3>成績與比重</h3><button type="button" class="btn" id="subjectGroupAdd">＋ 評分項目</button></div><div class="subject-notice">'+subjectEsc(targetText)+'<br>空白代表尚未公布；「已取得分數」不是目前考試的平均分數。</div>'+
       (subject.groups||[]).map(g=>{
-        const scores=(g.entries||[]),contribution=scores.reduce((sum,e)=>sum+(e.score!==null&&e.score!==undefined&&e.score!==''?Number(e.score)/100*(Number(g.weight)||0)/scores.length:0),0);
-        return '<div class="subject-group" data-subject-grade-group="'+subjectEsc(g.id)+'"><div class="subject-group-head"><div><strong>'+subjectEsc(g.name)+'</strong><div class="page-sub">占 '+subjectEsc(g.weight)+'% · 已得 '+subjectNumber(contribution)+' 分</div></div><div class="subject-mini-actions"><button type="button" class="btn" data-group-edit="'+subjectEsc(g.id)+'">編輯</button><button type="button" class="btn" data-group-delete="'+subjectEsc(g.id)+'" aria-label="刪除'+subjectEsc(g.name)+'">×</button></div></div>'+
-          scores.map((entry,i)=>'<div class="subject-grade-row"><label for="subjectScore-'+subjectEsc(g.id)+'-'+i+'">'+subjectEsc(entry.name||(scores.length===1?g.name:'第 '+(i+1)+' 次'))+'</label><input id="subjectScore-'+subjectEsc(g.id)+'-'+i+'" type="number" min="0" max="100" step="0.1" inputmode="decimal" placeholder="待公布" value="'+(entry.score===null||entry.score===undefined?'':subjectEsc(entry.score))+'" data-group-score="'+subjectEsc(g.id)+'" data-score-index="'+i+'" aria-label="'+subjectEsc(g.name)+'第'+(i+1)+'次成績"><small>占 '+subjectNumber(Number(g.weight)/scores.length)+'%</small></div>').join('')+'</div>';
+        const scores=(g.entries||[]),result=subjectGroupResult(g);
+        return '<div class="subject-group" data-subject-grade-group="'+subjectEsc(g.id)+'"><div class="subject-group-head"><div><strong>'+subjectEsc(g.name)+'</strong><div class="page-sub">'+subjectEsc(subjectGroupCaption(g,result))+'</div></div><div class="subject-mini-actions"><button type="button" class="btn" data-group-edit="'+subjectEsc(g.id)+'">編輯</button><button type="button" class="btn" data-group-delete="'+subjectEsc(g.id)+'" aria-label="刪除'+subjectEsc(g.name)+'">×</button></div></div>'+
+          scores.map((entry,i)=>'<div class="subject-grade-row"><label for="subjectScore-'+subjectEsc(g.id)+'-'+i+'">'+subjectEsc(entry.name||(scores.length===1?g.name:'第 '+(i+1)+' 次'))+'</label><input id="subjectScore-'+subjectEsc(g.id)+'-'+i+'" type="number" min="0" max="100" step="0.1" inputmode="decimal" placeholder="待公布" value="'+(entry.score===null||entry.score===undefined?'':subjectEsc(entry.score))+'" data-group-score="'+subjectEsc(g.id)+'" data-score-index="'+i+'" aria-label="'+subjectEsc(g.name)+'第'+(i+1)+'次成績"><small data-score-caption="'+i+'">'+subjectEsc(subjectScoreCaption(g,i,result))+'</small></div>').join('')+'</div>';
       }).join('')+
       (!(subject.groups||[]).length?'<div class="subject-empty">加入作業、小考、期中或期末等評分項目。</div>':'')+
       '<label class="subject-bonus">已確認的額外加分<input id="subjectBonus" type="number" min="0" max="100" step="0.1" value="'+subjectEsc(subject.bonus||0)+'" aria-label="已確認的額外加分">分</label><p class="page-sub">只填老師已確認的加分，規則不會自動觸發。</p>'+
@@ -584,13 +599,20 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     if(subject)Object.assign(subject,data);else{subject={id:uid(),...data,groups:[],progress:[],bonus:0};state.subjects.push(subject)}
     activeSubjectId=subject.id;await save();$('#subjectDialog').close();renderSubjects();
   };
+
+  function syncSubjectGradeSelection(){
+    const best=$('#subjectGroupSelection').value==='best',count=Number($('#subjectGroupCount').value)||1;
+    $('#subjectGroupTakeField').hidden=!best;$('#subjectGroupTakeCount').disabled=!best;$('#subjectGroupTakeCount').required=best;$('#subjectGroupTakeCount').max=count;
+  }
+  $('#subjectGroupSelection').onchange=syncSubjectGradeSelection;$('#subjectGroupCount').oninput=syncSubjectGradeSelection;
   $('#subjectGroupForm').onsubmit=async e=>{
     e.preventDefault();const subject=selectedSubject();if(!subject)return;
     subject.groups=subject.groups||[];let group=subject.groups.find(g=>String(g.id)===String(editingSubjectGroupId));
-    const count=Number($('#subjectGroupCount').value),name=$('#subjectGroupName').value.trim(),weight=Number($('#subjectGroupWeight').value);if(!name)return;
+    const count=Number($('#subjectGroupCount').value),name=$('#subjectGroupName').value.trim(),weight=Number($('#subjectGroupWeight').value),selection=$('#subjectGroupSelection').value,takeCount=selection==='best'?Number($('#subjectGroupTakeCount').value):count;if(!name)return;
+    if(!Number.isInteger(takeCount)||takeCount<1||takeCount>count){alert('採計次數必須介於 1 與總次數之間。');return}
     if(group&&group.entries.slice(count).some(e=>e.score!==null&&e.score!==undefined&&e.score!=='')&&!confirm('減少次數會刪除後面的已填成績，確定繼續？'))return;
     const entries=Array.from({length:count},(_,i)=>group?.entries[i]||{score:null});
-    if(group)Object.assign(group,{name,weight,entries});else subject.groups.push({id:uid(),name,weight,entries});
+    if(group)Object.assign(group,{name,weight,entries,selection,takeCount});else subject.groups.push({id:uid(),name,weight,entries,selection,takeCount});
     await save();$('#subjectGroupDialog').close();renderSubjects();
   };
   $('#subjectSeed').onclick=async()=>{
