@@ -259,7 +259,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
 
 
 <dialog id="subjectDialog"><form class="modal subject-settings" id="subjectForm"><h2 id="subjectDialogTitle">新增學科</h2><label>學科名稱<input id="subjectName" maxlength="100" required></label><label>目標學期成績（0–100）<input id="subjectTarget" type="number" min="0" max="100" step="0.1" value="85" required></label><label>評分規則、加分與免考條件<textarea id="subjectNotes" rows="5" maxlength="4000"></textarea></label><div class="modal-actions"><button class="btn" type="button" id="subjectCancel">取消</button><button class="btn primary" type="submit">儲存學科</button></div></form></dialog>
-<dialog id="subjectGroupDialog"><form class="modal subject-settings" id="subjectGroupForm"><h2 id="subjectGroupTitle">新增評分項目</h2><label>名稱<input id="subjectGroupName" required maxlength="100" placeholder="例如：每週測驗"></label><label>占學期成績比重（%）<input id="subjectGroupWeight" type="number" min="0" max="100" step="0.1" required></label><label>總次數（各次等比重）<input id="subjectGroupCount" type="number" min="1" max="100" step="1" required value="1"></label><label>採計方式<select id="subjectGroupSelection"><option value="all">全部採計</option><option value="best">取最高幾次</option></select></label><label id="subjectGroupTakeField" hidden>採計次數<input id="subjectGroupTakeCount" type="number" min="1" max="100" step="1" value="1"></label><p class="page-sub">例如總次數 4、採計 3：只取最高 3 次的平均，再乘這個項目的比重。未公布請留空；0 分請填 0。成績未填齊時顯示暫計結果。</p><div class="modal-actions"><button class="btn" type="button" id="subjectGroupCancel">取消</button><button class="btn primary" type="submit">儲存評分項目</button></div></form></dialog>
+<dialog id="subjectGroupDialog"><form class="modal subject-settings" id="subjectGroupForm"><h2 id="subjectGroupTitle">新增評分項目</h2><label>名稱<input id="subjectGroupName" required maxlength="100" placeholder="例如：每週測驗"></label><label>占學期成績比重（%）<input id="subjectGroupWeight" type="number" min="0" max="100" step="0.1" required></label><label>總次數（各次等比重）<input id="subjectGroupCount" type="number" min="1" max="100" step="1" required value="1"></label><label>採計方式<select id="subjectGroupSelection"><option value="all">全部採計</option><option value="best">取最高幾次</option><option value="cumulative">累加計分（出席加分）</option></select></label><label id="subjectGroupPointsField" hidden>每次出席加分<input id="subjectGroupPoints" type="number" min="0.1" max="100" step="0.1" value="3"></label><label id="subjectGroupTakeField" hidden>採計次數<input id="subjectGroupTakeCount" type="number" min="1" max="100" step="1" value="1"></label><p class="page-sub">例如總次數 4、採計 3：只取最高 3 次的平均，再乘這個項目的比重。未公布請留空；0 分請填 0。成績未填齊時顯示暫計結果。</p><div class="modal-actions"><button class="btn" type="button" id="subjectGroupCancel">取消</button><button class="btn primary" type="submit">儲存評分項目</button></div></form></dialog>
 
 <script>
 (()=>{
@@ -434,6 +434,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
 
   function subjectGroupResult(group){
     const entries=group.entries||[],count=entries.length,weight=Number(group.weight)||0;
+    if(group.selection==='cumulative'){const points=Math.max(0,Number(group.pointsPerEntry)||0),completed=entries.filter(e=>Number(e.score)===1).length,earned=Math.min(weight,completed*points);return {best:false,cumulative:true,take:count,earned,knownWeight:earned,pending:Math.max(0,count-completed),selectedIds:new Set(),scoredIds:new Set()};}
     const best=group.selection==='best',take=best?Math.max(1,Math.min(count,Number(group.takeCount)||count)):count;
     const scored=entries.map((e,index)=>({index,score:e.score===null||e.score===undefined||e.score===''?null:Number(e.score)})).filter(e=>e.score!==null&&Number.isFinite(e.score)&&e.score>=0&&e.score<=100);
     const selected=(best?[...scored].sort((a,b)=>b.score-a.score||a.index-b.index):scored).slice(0,take);
@@ -442,9 +443,11 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     return {best,take,earned,knownWeight:take?selected.length/take*weight:0,pending:count-scored.length,selectedIds,scoredIds};
   }
   function subjectGroupCaption(group,result=subjectGroupResult(group)){
+    if(result.cumulative)return '上限 '+group.weight+' 分 · 每次 +'+subjectNumber(group.pointsPerEntry)+' 分 · 已累積 '+subjectNumber(result.earned)+' 分';
     return '占 '+group.weight+'%'+(result.best?' · '+group.entries.length+' 取 '+result.take+'（最高分）':'')+' · '+(result.best&&result.pending?'暫計 ':'已得 ')+subjectNumber(result.earned)+' 分';
   }
   function subjectScoreCaption(group,index,result=subjectGroupResult(group)){
+    if(result.cumulative)return Number(group.entries[index]?.score)===1?'已完成 +'+subjectNumber(group.pointsPerEntry)+' 分':'未完成';
     if(!result.best)return '占 '+subjectNumber(Number(group.weight)/(group.entries||[]).length)+'%';
     if(!result.scoredIds.has(index))return '待公布';
     return result.selectedIds.has(index)?(result.pending?'暫採計':'採計'):'不採計';
@@ -476,7 +479,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     const subject=selectedSubject();if(!subject)return;
     const group=(subject.groups||[]).find(g=>String(g.id)===String(id));editingSubjectGroupId=group?.id||null;
     $('#subjectGroupTitle').textContent=group?'編輯評分項目':'新增評分項目';
-    $('#subjectGroupName').value=group?.name||'';$('#subjectGroupWeight').value=group?.weight??'';$('#subjectGroupCount').value=group?.entries?.length||1;$('#subjectGroupSelection').value=group?.selection||'all';$('#subjectGroupTakeCount').value=group?.takeCount||group?.entries?.length||1;syncSubjectGradeSelection();
+    $('#subjectGroupName').value=group?.name||'';$('#subjectGroupWeight').value=group?.weight??'';$('#subjectGroupCount').value=group?.entries?.length||1;$('#subjectGroupSelection').value=group?.selection||'all';$('#subjectGroupTakeCount').value=group?.takeCount||group?.entries?.length||1;$('#subjectGroupPoints').value=group?.pointsPerEntry||3;syncSubjectGradeSelection();
     $('#subjectGroupDialog').showModal();$('#subjectGroupName').focus();
   }
 
@@ -536,7 +539,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
       (subject.groups||[]).map(g=>{
         const scores=(g.entries||[]),result=subjectGroupResult(g);
         return '<div class="subject-group" data-subject-grade-group="'+subjectEsc(g.id)+'"><div class="subject-group-head"><div><strong>'+subjectEsc(g.name)+'</strong><div class="page-sub">'+subjectEsc(subjectGroupCaption(g,result))+'</div></div><div class="subject-mini-actions"><button type="button" class="btn" data-group-edit="'+subjectEsc(g.id)+'">編輯</button><button type="button" class="btn" data-group-delete="'+subjectEsc(g.id)+'" aria-label="刪除'+subjectEsc(g.name)+'">×</button></div></div>'+
-          scores.map((entry,i)=>'<div class="subject-grade-row"><label for="subjectScore-'+subjectEsc(g.id)+'-'+i+'">'+subjectEsc(entry.name||(scores.length===1?g.name:'第 '+(i+1)+' 次'))+'</label><input id="subjectScore-'+subjectEsc(g.id)+'-'+i+'" type="number" min="0" max="100" step="0.1" inputmode="decimal" placeholder="待公布" value="'+(entry.score===null||entry.score===undefined?'':subjectEsc(entry.score))+'" data-group-score="'+subjectEsc(g.id)+'" data-score-index="'+i+'" aria-label="'+subjectEsc(g.name)+'第'+(i+1)+'次成績"><small data-score-caption="'+i+'">'+subjectEsc(subjectScoreCaption(g,i,result))+'</small></div>').join('')+'</div>';
+          scores.map((entry,i)=>g.selection==='cumulative'?'<div class="subject-grade-row"><label>第 '+(i+1)+' 次</label><input type="checkbox" style="width:22px;height:22px" data-cumulative-check="'+subjectEsc(g.id)+'" data-score-index="'+i+'" '+(Number(entry.score)===1?'checked':'')+' aria-label="第'+(i+1)+'次完成"><small data-score-caption="'+i+'">'+subjectEsc(subjectScoreCaption(g,i,result))+'</small></div>':'<div class="subject-grade-row"><label for="subjectScore-'+subjectEsc(g.id)+'-'+i+'">'+subjectEsc(entry.name||(scores.length===1?g.name:'第 '+(i+1)+' 次'))+'</label><input id="subjectScore-'+subjectEsc(g.id)+'-'+i+'" type="number" min="0" max="100" step="0.1" inputmode="decimal" placeholder="待公布" value="'+(entry.score===null||entry.score===undefined?'':subjectEsc(entry.score))+'" data-group-score="'+subjectEsc(g.id)+'" data-score-index="'+i+'" aria-label="'+subjectEsc(g.name)+'第'+(i+1)+'次成績"><small data-score-caption="'+i+'">'+subjectEsc(subjectScoreCaption(g,i,result))+'</small></div>').join('')+'</div>';
       }).join('')+
       (!(subject.groups||[]).length?'<div class="subject-empty">加入作業、小考、期中或期末等評分項目。</div>':'')+
       '<label class="subject-bonus">已確認的額外加分<input id="subjectBonus" type="number" min="0" max="100" step="0.1" value="'+subjectEsc(subject.bonus||0)+'" aria-label="已確認的額外加分">分</label><p class="page-sub">只填老師已確認的加分，規則不會自動觸發。</p>'+
@@ -555,6 +558,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     detail.querySelectorAll('[data-group-edit]').forEach(b=>b.onclick=()=>openSubjectGroup(b.dataset.groupEdit));
     detail.querySelectorAll('[data-group-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('刪除這個評分項目及其中的成績？'))return;subject.groups=subject.groups.filter(g=>String(g.id)!==b.dataset.groupDelete);await save();renderSubjects()});
 
+    detail.querySelectorAll('[data-cumulative-check]').forEach(input=>{input.onchange=()=>{const g=subject.groups.find(g=>String(g.id)===input.dataset.cumulativeCheck);g.entries[Number(input.dataset.scoreIndex)].score=input.checked?1:null;refreshSubjectGradeNumbers(subject);saveSubjectGradeSoon(true)};});
     detail.querySelectorAll('[data-group-score]').forEach(input=>{
       const update=()=>{
         if(!input.checkValidity())return false;
@@ -602,17 +606,19 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
 
   function syncSubjectGradeSelection(){
     const best=$('#subjectGroupSelection').value==='best',count=Number($('#subjectGroupCount').value)||1;
-    $('#subjectGroupTakeField').hidden=!best;$('#subjectGroupTakeCount').disabled=!best;$('#subjectGroupTakeCount').required=best;$('#subjectGroupTakeCount').max=count;
+    $('#subjectGroupPointsField').hidden=$('#subjectGroupSelection').value!=='cumulative';$('#subjectGroupPoints').required=$('#subjectGroupSelection').value==='cumulative';$('#subjectGroupTakeField').hidden=!best;$('#subjectGroupTakeCount').disabled=!best;$('#subjectGroupTakeCount').required=best;$('#subjectGroupTakeCount').max=count;
   }
   $('#subjectGroupSelection').onchange=syncSubjectGradeSelection;$('#subjectGroupCount').oninput=syncSubjectGradeSelection;
   $('#subjectGroupForm').onsubmit=async e=>{
     e.preventDefault();const subject=selectedSubject();if(!subject)return;
     subject.groups=subject.groups||[];let group=subject.groups.find(g=>String(g.id)===String(editingSubjectGroupId));
-    const count=Number($('#subjectGroupCount').value),name=$('#subjectGroupName').value.trim(),weight=Number($('#subjectGroupWeight').value),selection=$('#subjectGroupSelection').value,takeCount=selection==='best'?Number($('#subjectGroupTakeCount').value):count;if(!name)return;
+    const pointsPerEntry=Number($('#subjectGroupPoints').value);const count=Number($('#subjectGroupCount').value),name=$('#subjectGroupName').value.trim(),weight=Number($('#subjectGroupWeight').value),selection=$('#subjectGroupSelection').value,takeCount=selection==='best'?Number($('#subjectGroupTakeCount').value):count;if(!name)return;
     if(!Number.isInteger(takeCount)||takeCount<1||takeCount>count){alert('採計次數必須介於 1 與總次數之間。');return}
     if(group&&group.entries.slice(count).some(e=>e.score!==null&&e.score!==undefined&&e.score!=='')&&!confirm('減少次數會刪除後面的已填成績，確定繼續？'))return;
     const entries=Array.from({length:count},(_,i)=>group?.entries[i]||{score:null});
-    if(group)Object.assign(group,{name,weight,entries,selection,takeCount});else subject.groups.push({id:uid(),name,weight,entries,selection,takeCount});
+    if(selection==='cumulative'&&(!Number.isFinite(pointsPerEntry)||pointsPerEntry<=0)){alert('請輸入每次加分');return}if(group&&group.selection!==selection&&(group.selection==='cumulative'||selection==='cumulative')&&group.entries.some(e=>e.score!==null&&e.score!==undefined)&&!confirm('切換計分模式會清除這個項目的原有紀錄，確定繼續？'))return;
+    const finalEntries=group&&group.selection!==selection&&(group.selection==='cumulative'||selection==='cumulative')?Array.from({length:count},()=>({score:null})):entries;
+    if(group)Object.assign(group,{name,weight,entries:finalEntries,selection,takeCount,pointsPerEntry});else subject.groups.push({id:uid(),name,weight,entries:finalEntries,selection,takeCount,pointsPerEntry});
     await save();$('#subjectGroupDialog').close();renderSubjects();
   };
   $('#subjectSeed').onclick=async()=>{
