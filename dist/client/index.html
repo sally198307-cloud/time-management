@@ -425,7 +425,21 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
   async function readCloud(){try{const r=await apiFetch('/api/state',{cache:'no-store'});if(!r.ok)throw new Error();return await r.json()}catch{return undefined}}
   async function writeCloud(){try{const r=await apiFetch('/api/state',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({state})});if(!r.ok)throw new Error();setSync(syncTime(),'ok');return true}catch{setSync('離線，稍後重試','error');return false}}
   async function load(){setSync('同步資料中…');const local=readLocal()||await readDb(),cloudResult=await readCloud(),cloud=cloudResult===undefined?undefined:cloudResult.state;let saved=cloud===undefined?local:(cloud||local);if(saved){state=saved;const fresh=Object.fromEntries(DEFAULT_CATS.map(c=>[c.name,c.color]));state.events=state.events||[];state.categories=(state.categories||DEFAULT_CATS).map(c=>({...c,color:fresh[c.name]||c.color}));state.tasks=(state.tasks||[]).map(t=>{let dueDate=Object.prototype.hasOwnProperty.call(t,'dueDate')?t.dueDate:t.date;if(dueDate&&t.date&&dueDate<t.date)dueDate=t.date;return {...t,dueDate,dueTime:dueDate?(t.dueTime||'23:59'):'',daily:!!t.daily,completedDates:t.completedDates||[]}});state.taskHistory=state.taskHistory||[...new Map(state.tasks.map(t=>[t.title,{title:t.title,category:t.category,dueTime:t.dueTime,hasDeadline:!!t.dueDate,daily:t.daily}])).values()];state.memos=state.memos||[];state.aiPlans=state.aiPlans||[];state.collegeGoals=Array.isArray(state.collegeGoals)?state.collegeGoals:[]}else{state.events=[];state.tasks=[];state.taskHistory=[];state.memos=[];state.aiPlans=[]}const targetsUpdated=state.subjectTargetVersion!==1;if(targetsUpdated){for(const subject of state.subjects||[])subject.target=85;state.subjectTargetVersion=1}lastSavedState=JSON.stringify(state);writeLocal();if((cloud===null&&local)||(targetsUpdated&&cloud!==undefined))await writeCloud();else setSync(cloud===undefined?'離線使用本機資料':syncTime(cloudResult?.updatedAt),cloud===undefined?'error':'ok');render()}
-  async function save({recordUndo=true}={}){const next=JSON.stringify(state);if(recordUndo&&lastSavedState&&next!==lastSavedState){undoStack.push(lastSavedState);if(undoStack.length>30)undoStack.shift()}lastSavedState=next;$('#undo').disabled=!undoStack.length;writeLocal();const db=await dbp;if(db)await new Promise(ok=>{try{const tx=db.transaction('data','readwrite');tx.objectStore('data').put(state,'state');tx.oncomplete=ok;tx.onerror=ok;tx.onabort=ok}catch{ok()}});if(saving)return;saving=true;setSync('同步中…');await writeCloud();saving=false}
+  let crossViewRefreshQueued=false;
+  function syncAllViews(){
+    if(crossViewRefreshQueued)return;
+    crossViewRefreshQueued=true;
+    queueMicrotask(()=>{
+      crossViewRefreshQueued=false;
+      const active=document.activeElement;
+      if(active&&active.matches('input:not([type="checkbox"]):not([type="radio"]),textarea,[contenteditable="true"]')){
+        active.addEventListener('blur',()=>queueMicrotask(()=>render()),{once:true});
+        return;
+      }
+      render();
+    });
+  }
+  async function save({recordUndo=true}={}){const next=JSON.stringify(state);if(recordUndo&&lastSavedState&&next!==lastSavedState){undoStack.push(lastSavedState);if(undoStack.length>30)undoStack.shift()}lastSavedState=next;$('#undo').disabled=!undoStack.length;writeLocal();syncAllViews();const db=await dbp;if(db)await new Promise(ok=>{try{const tx=db.transaction('data','readwrite');tx.objectStore('data').put(state,'state');tx.oncomplete=ok;tx.onerror=ok;tx.onabort=ok}catch{ok()}});if(saving)return;saving=true;setSync('同步中…');await writeCloud();saving=false}
   window.addEventListener('pagehide',writeLocal);
   const subjectEsc=value=>esc(String(value??''));
 
