@@ -230,7 +230,8 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
 <dialog id="toolsDialog"><div class="modal"><div class="modal-head"><h2>更多工具</h2><button type="button" class="close" id="closeTools" aria-label="關閉"><i class="fa-solid fa-xmark"></i></button></div><div class="tool-grid"><button class="tool-button" type="button" id="toolsWidget"><i class="fa-solid fa-mobile-screen"></i><span><strong>主畫面 Widget</strong><small>安裝月曆或今日小工具</small></span></button><button class="tool-button" type="button" id="toolsSafariSetup"><span><strong>iPhone／iPad 分享設定</strong><small>設定 Safari 捷徑，匯入 TronClass 作業</small></span></button><button class="tool-button" type="button" id="toolsTron"><span><strong>TronClass 課務匯入</strong><small>貼上作業清單、確認截止時間</small></span></button><button class="tool-button" type="button" id="toolsApple"><i class="fa-solid fa-inbox"></i><span><strong>培茲行事曆</strong><small>查看匯入紀錄與同步設定</small></span></button><button class="tool-button" type="button" id="toolsCategories"><i class="fa-solid fa-tags"></i><span><strong>管理分類</strong><small>新增名稱與設定顏色</small></span></button><button class="tool-button" type="button" id="toolsUndo"><i class="fa-solid fa-rotate-left"></i><span><strong>返回上一步</strong><small>復原剛才的修改</small></span></button><button class="tool-button" type="button" id="exportData"><i class="fa-solid fa-file-export"></i><span><strong>匯出備份</strong><small>下載完整 JSON 備份檔</small></span></button><button class="tool-button" type="button" id="importData"><i class="fa-solid fa-file-import"></i><span><strong>匯入備份</strong><small>從備份檔恢復資料</small></span></button><button class="tool-button" type="button" id="versionHistory"><i class="fa-solid fa-clock-rotate-left"></i><span><strong>版本紀錄</strong><small>查看並恢復最近 20 次修改</small></span></button></div><input id="importFile" type="file" accept="application/json,.json" hidden></div></dialog>
 
 
-<dialog id="tronDialog"><div class="modal" style="width:min(960px,94vw);max-height:90vh;overflow:auto"><div class="modal-head"><div><h2>TronClass 課務匯入</h2><div class="history-note">手動更新 · 確認後才會加入任務／考試</div></div><button class="close" id="tronClose" aria-label="關閉">×</button></div>
+<dialog id="tronDialog"><div class="modal" style="width:min(960px,94vw);max-height:90vh;overflow:auto"><div class="modal-head"><div><h2>TronClass 課務同步</h2><div class="history-note">自動取得各科作業 · 由你決定是否加入任務／考試</div></div><button class="close" id="tronClose" aria-label="關閉">×</button></div>
+<div class="widget-intro" id="tronAutoStatus" role="status">正在檢查 TronClass 自動同步狀態…</div><p class="history-note">電腦安裝配套 Chrome 擴充功能後，只要 Chrome 開啟且東吳 TronClass 的登入仍有效，就會每 30 分鐘檢查一次。學校要求重新登入時會暫停，不會保存你的學校密碼；關閉 Chrome 後不能背景更新。</p>
 <details id="tronSafariHelp" open><summary>iPhone／iPad：設定 Safari 分享匯入</summary>
 <p>設定一次後，在 TronClass 作業頁按「分享 → 傳到時間管理」，即可帶入本頁文字。這是手動觸發的分享匯入，不會在背景自動同步。</p>
 <ol><li>開啟 Apple「捷徑」，新增捷徑並命名為「傳到時間管理」。</li><li>在捷徑詳細設定開啟「在分享表單中顯示」，接收類型選「Safari 網頁」。</li><li>加入「在網頁上執行 JavaScript」，輸入使用「捷徑輸入」，刪除預設程式並貼上下方內容。</li><li>在下一步加入「打開 URL」，輸入使用上一步的 JavaScript 結果。</li><li>在 Safari 登入 TronClass，開啟「課程 → 作業」並等內容載入，按分享，選「傳到時間管理」。第一次執行時依 Apple 提示允許。</li></ol>
@@ -569,6 +570,18 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
       }).join('')+(!progress.length?'<div class="subject-empty">直接寫下章節、複習或練習事項。<br>需要安排時，再選擇「加入任務」。</div>':'')+
       '<form class="subject-add-progress" id="subjectProgressForm"><input id="subjectProgressTitle" type="text" maxlength="200" required placeholder="自己輸入讀書進度，例如：複習 if / else"><input id="subjectProgressDate" type="date" aria-label="預計完成日期"><button class="btn primary" type="submit">新增進度</button></form>'+
       '<p class="page-sub">新增後只保存在本科進度。「加入任務」會開啟新增視窗，讓你修改名稱、日期與提醒，按儲存才會加入。兩邊的完成狀態各自管理。</p></section></div>';
+    const tronCourses=[...new Set((state.tronInbox||[]).map(x=>x.course).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    const trimCourse=name=>String(name||'').normalize('NFKC').replace(/[\s（()）]/g,'').toLowerCase();
+    const courseName=subject.tronCourse||tronCourses.find(name=>trimCourse(name)===trimCourse(subject.name))||'';
+    const homework=(state.tronInbox||[]).filter(x=>x.course===courseName).sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999'));
+    const tronSection=document.createElement('section');tronSection.className='card subject-panel';tronSection.style.marginTop='16px';
+    tronSection.innerHTML='<div class="subject-panel-head"><h3>TronClass 作業</h3><button type="button" class="btn" id="subjectOpenTron">查看待確認作業</button></div>'+
+      '<label style="margin:12px 0">對應 TronClass 課程<select id="subjectTronCourse"><option value="">未對應</option>'+tronCourses.map(name=>'<option value="'+subjectEsc(name)+'" '+(name===courseName?'selected':'')+'>'+subjectEsc(name)+'</option>').join('')+'</select></label>'+
+      (homework.length?homework.slice(0,40).map(x=>'<div class="subject-progress-item"><div class="subject-progress-copy"><strong>'+subjectEsc(x.originalTitle)+'</strong><small>'+subjectEsc((x.date?x.date+' '+(x.time||'')+' 截止':'尚未設定截止日')+' · '+x.status)+(x.resolved?' · 已處理':' · 待確認')+'</small></div></div>').join(''):'<div class="subject-empty">目前沒有這門課的同步作業，或尚未選擇對應課程。</div>')+
+      '<p class="page-sub" style="margin-top:12px">作業清單會自動更新，但不會自行加入任務，也不會更動成績或讀書進度。</p>';
+    detail.appendChild(tronSection);
+    $('#subjectOpenTron').onclick=openTron;
+    $('#subjectTronCourse').onchange=async event=>{subject.tronCourse=event.target.value;await save();renderSubjects()};
     $('#subjectEdit').onclick=()=>openSubject(subject.id);
     $('#subjectDelete').onclick=async()=>{if(!confirm('刪除「'+subject.name+'」的成績與讀書進度？已加入的任務會保留。'))return;state.subjects=state.subjects.filter(s=>s!==subject);activeSubjectId=null;await save();render()};
     $('#subjectGroupAdd').onclick=()=>openSubjectGroup();
@@ -1032,12 +1045,16 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
   function tronSame(item){return [...state.tasks,...state.events].filter(x=>!x.tronSourceKey&&String(x.title||'').normalize('NFKC').replace(/\s/g,'')===String(item.title).normalize('NFKC').replace(/\s/g,''))}
   function tronPending(){return (state.tronInbox||[]).filter(x=>!x.resolved)}
   function openTron(){renderTron();$('#tronDialog').showModal()}
+  let tronAutoError='',tronAutoReady=false,tronQueuedSnapshot=null;
   function renderTron(){
+    const autoStatus=$('#tronAutoStatus');
+    autoStatus.textContent=tronAutoError?'自動同步異常：'+tronAutoError+(state.tronLastAutoSync?' · 上次成功 '+appleSyncTime(state.tronLastAutoSync):''):state.tronLastAutoSync?'上次自動同步：'+appleSyncTime(state.tronLastAutoSync)+' · '+(state.tronAutoCourseCount||0)+' 門課 · '+(state.tronAutoAssignmentCount||0)+' 筆作業':'尚未收到自動同步資料。安裝配套 Chrome 擴充功能、登入東吳 TronClass 後會自動讀取。';
     const pending=tronPending();$('#tronHomeNotice').hidden=!pending.length;$('#tronHomeCount').textContent=pending.length+' 筆 TronClass 課務待確認';
     if(pending.length){$('.nav button[data-view="apple"]').hidden=false;$('.nav').classList.remove('apple-quiet')}
     $('#tronReview').innerHTML=pending.length?pending.map((x,i)=>{
-      const match=tronMatch(x),same=tronSame(x),changed=match&&(match.tronSourceDate!==x.date||match.tronSourceTime!==x.time);
-      return '<article class="tron-row" data-tron-key="'+esc(x.key)+'"><label><span><input type="checkbox" data-tron-check '+((!match&&!same.length&&x.status==='未繳')?'checked':'')+' '+(match&&!changed?'disabled':'')+'> '+esc(x.course)+' · '+esc(x.originalTitle)+'</span></label><small>來源：'+esc(x.startDate+' '+x.startTime+' ～ '+x.date+' '+x.time)+' · '+esc(x.status)+'</small><small class="tron-warning">'+(match?(changed?'来源截止時間已變更：選取後只更新日期時間，保留名稱、分類與完成紀錄。':'已匯入，不會重複加入。'):same.length?'網站已有同名事項，請先核對：'+same.map(t=>esc(t.title+' · '+(t.dueDate||t.date||'未設日期'))).join('、'):x.status==='已繳'?'TronClass 已繳交，預設不選取。':'請核對日期與名稱後加入。')+'</small><div class="tron-fields"><label>加入後名稱<input data-tron-title value="'+esc(match?.title||x.title)+'" maxlength="160" '+(match?'disabled':'')+'></label><label>加入為<select data-tron-kind '+(match?'disabled':'')+'><option value="task">任務（截止日）</option><option value="exam" '+(x.kind==='exam'?'selected':'')+'>考試（來源起訖）</option></select></label><label>分類<select data-tron-category '+(match?'disabled':'')+'>'+state.categories.map(c=>'<option '+((match?.category||x.category)===c.name?'selected':'')+'>'+esc(c.name)+'</option>').join('')+'</select></label><label>開始日期<input type="date" data-tron-start-date value="'+esc(x.startDate)+'"></label><label>開始時間<input type="time" data-tron-start-time value="'+esc(x.startTime)+'"></label><label>截止日期<input type="date" data-tron-date value="'+esc(x.date)+'"></label><label>截止時間<input type="time" data-tron-time value="'+esc(x.time)+'"></label></div></article>';
+      const match=tronMatch(x),same=tronSame(x),changed=match&&(match.tronSourceDate!==x.date||match.tronSourceTime!==x.time||match.tronSourceStartDate&&match.tronSourceStartDate!==x.startDate);
+      const trustedLink=typeof x.link==='string'&&/^https:\/\/tronclass\.scu\.edu\.tw(?:\/|$)/.test(x.link)?x.link:'';
+      return '<article class="tron-row" data-tron-key="'+esc(x.key)+'"><label><span><input type="checkbox" data-tron-check '+((!match&&!same.length&&x.status==='未繳')?'checked':'')+' '+(match&&!changed?'disabled':'')+'> '+esc(x.course)+' · '+esc(x.originalTitle)+'</span></label><small>來源：'+esc((x.startDate||'未提供開始日')+' '+(x.startTime||'')+' ～ '+(x.date||'未提供截止日')+' '+(x.time||''))+' · '+esc(x.status)+(x.source==='auto'?' · 自動同步':'')+'</small>'+(trustedLink?'<small><a href="'+esc(trustedLink)+'" target="_blank" rel="noopener noreferrer">回 TronClass 查看原作業 ↗</a></small>':'')+'<small class="tron-warning">'+(match?(changed?'來源時間已變更：選取後只更新日期時間，保留名稱、分類與完成紀錄。':'已匯入，不會重複加入。'):same.length?'網站已有同名事項，請先核對：'+same.map(t=>esc(t.title+' · '+(t.dueDate||t.date||'未設日期'))).join('、'):!x.date?'TronClass 尚未提供截止日，加入前請自行確認並填寫。':x.status==='已繳'?'TronClass 已繳交，預設不選取。':'請核對日期與名稱後加入。')+'</small><div class="tron-fields"><label>加入後名稱<input data-tron-title value="'+esc(match?.title||x.title)+'" maxlength="160" '+(match?'disabled':'')+'></label><label>加入為<select data-tron-kind '+(match?'disabled':'')+'><option value="task">任務（截止日）</option><option value="exam" '+(x.kind==='exam'?'selected':'')+'>考試（來源起訖）</option></select></label><label>分類<select data-tron-category '+(match?'disabled':'')+'>'+state.categories.map(c=>'<option '+((match?.category||x.category)===c.name?'selected':'')+'>'+esc(c.name)+'</option>').join('')+'</select></label><label>開始日期<input type="date" data-tron-start-date value="'+esc(x.startDate||'')+'"></label><label>開始時間<input type="time" data-tron-start-time value="'+esc(x.startTime||'00:00')+'"></label><label>截止日期<input type="date" data-tron-date value="'+esc(x.date||'')+'"></label><label>截止時間<input type="time" data-tron-time value="'+esc(x.time||'')+'"></label></div></article>';
     }).join(''):'<div class="empty">沒有待確認課務。貼上 TronClass 作業頁文字即可開始。</div>';
   }
   $('#tronClose').onclick=()=>$('#tronDialog').close();
@@ -1061,13 +1078,47 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     if(chosen.some(x=>x.kind==='exam'&&x.startDate!==x.date)){ $('#tronMessage').textContent='考試請設定為同一天的實際考試起訖；作業開放期間請選「任務」。';return}
     if(chosen.some(x=>tronSame({...x.item,title:x.title}).length)&&!confirm('部分項目與網站已有事項同名，仍要新增嗎？'))return;
     for(const x of chosen){
-      const match=tronMatch(x.item),meta={tronSourceKey:x.item.key,tronSourceDate:x.item.date,tronSourceTime:x.item.time,tronCourse:x.item.course};
+      const match=tronMatch(x.item),meta={tronSourceKey:x.item.key,tronSourceDate:x.item.date,tronSourceTime:x.item.time,tronSourceStartDate:x.item.startDate,tronCourse:x.item.course};
       if(match){Object.assign(match,meta);if(state.tasks.includes(match)){match.date=x.startDate;match.startTime=x.startTime;match.dueDate=x.date;match.dueTime=x.time}else{match.date=x.startDate;match.start=x.startTime;match.end=x.time}}
       else if(x.kind==='exam')state.events.push({id:uid(),title:x.title,notes:'TronClass 匯入 · '+x.item.originalTitle,date:x.date,start:x.startTime,end:x.time,category:x.category,owner:'me',allDay:false,isCourse:false,isExam:true,subtasks:[],...meta});
-      else state.tasks.push({id:uid(),title:x.title,notes:'TronClass 匯入 · '+x.item.originalTitle,date:x.startDate,startTime:x.startTime,dueDate:x.date,dueTime:x.time,category:x.category,owner:'me',allDay:false,daily:false,done:false,priority:'normal',reminderMinutes:'none',subtasks:[],...meta});
+      else state.tasks.push({id:uid(),title:x.title,notes:'TronClass 匯入 · '+x.item.originalTitle+(x.item.description?'\n'+x.item.description:''),date:x.startDate,startTime:x.startTime,dueDate:x.date,dueTime:x.time,category:x.category,owner:'me',allDay:false,daily:false,done:false,priority:'normal',reminderMinutes:'none',subtasks:[],...meta});
       x.item.resolved=true;
     }await save();render();$('#tronMessage').textContent='已加入／更新 '+chosen.length+' 項。可以在「我的任務」或「考試」查看。';
   };
+
+  // The optional Chrome companion reads TronClass in its own signed-in tab.
+  // The website receives homework metadata only; it never sees login credentials.
+  let tronAutoQueue=Promise.resolve();
+  async function receiveTronAuto(data){
+    tronAutoError=typeof data?.tronLastError==='string'?data.tronLastError.slice(0,240):'';
+    const snapshot=data?.tronSnapshot;
+    if(!snapshot||snapshot.source!=='tronclass.scu.edu.tw'||!Array.isArray(snapshot.assignments)){
+      renderTron();return;
+    }
+    if(!/^\d{4}-\d{2}-\d{2}T/.test(snapshot.fetchedAt)||snapshot.assignments.length>1500){tronAutoError='同步資料格式不正確。';renderTron();return}
+    if(state.tronLastAutoSync===snapshot.fetchedAt){renderTron();return}
+    state.tronInbox=Array.isArray(state.tronInbox)?state.tronInbox:[];
+    let added=0;
+    for(const item of snapshot.assignments){
+      if(!/^tron:\d+:\d+$/.test(item?.key||'')||typeof item.course!=='string'||typeof item.originalTitle!=='string'||!item.course.trim()||!item.originalTitle.trim())continue;
+      const date=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?value:'',time=value=>/^\d{2}:\d{2}$/.test(value||'')?value:'';
+      const x={key:item.key,course:item.course.slice(0,120),originalTitle:item.originalTitle.slice(0,180),title:String(item.title||item.course+'｜'+item.originalTitle).slice(0,300),startDate:date(item.startDate),startTime:time(item.startTime)||'00:00',date:date(item.date),time:time(item.time),status:['已繳','未繳','待確認'].includes(item.status)?item.status:'待確認',kind:'task',category:'考試／報告',description:String(item.description||'').slice(0,300),link:typeof item.link==='string'&&/^https:\/\/tronclass\.scu\.edu\.tw(?:\/|$)/.test(item.link)?item.link:'',source:'auto'};
+      const old=state.tronInbox.find(t=>t.key===x.key),match=tronMatch(x);
+      if(old){
+        if(old.date!==x.date||old.time!==x.time||old.startDate!==x.startDate||old.status!==x.status||old.originalTitle!==x.originalTitle){Object.assign(old,x,{resolved:false});added++}
+      }else{state.tronInbox.push({...x,resolved:!!match&&match.tronSourceDate===x.date&&match.tronSourceTime===x.time});added++}
+    }
+    state.tronLastAutoSync=snapshot.fetchedAt;
+    state.tronAutoCourseCount=Math.max(0,Number(snapshot.courses)||0);
+    state.tronAutoAssignmentCount=snapshot.assignments.length;
+    await save({recordUndo:false});render();
+    if(added&&$('#tronDialog').open)$('#tronMessage').textContent='自動同步帶來 '+added+' 筆新增／更新作業，請確認後再加入任務。';
+  }
+  window.addEventListener('message',event=>{
+    if(event.source!==window||event.origin!==location.origin||event.data?.type!=='LIH_TRON_AUTO_SYNC'||event.data.source!=='lih-tronclass-extension-v1')return;
+    if(!tronAutoReady){tronQueuedSnapshot=event.data;return}
+    tronAutoQueue=tronAutoQueue.catch(()=>{}).then(()=>receiveTronAuto(event.data));
+  });
 
 
   function openSafariSetup(){
@@ -1107,7 +1158,7 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
     $('#tronCourse').focus();tronSharedText=null;
   }
 
-  setInterval(updateNowLines,10000);setInterval(()=>{renderExams();renderStudyDesk()},60000);setInterval(renderUrgent,60000);setInterval(loadAppleCalendar,300000);setInterval(checkTaskReminders,30000);load().then(()=>{checkTaskReminders();loadAppleCalendar();receiveTronShare()});
+  setInterval(updateNowLines,10000);setInterval(()=>{renderExams();renderStudyDesk()},60000);setInterval(renderUrgent,60000);setInterval(loadAppleCalendar,300000);setInterval(checkTaskReminders,30000);load().then(()=>{tronAutoReady=true;if(tronQueuedSnapshot){const queued=tronQueuedSnapshot;tronQueuedSnapshot=null;tronAutoQueue=tronAutoQueue.then(()=>receiveTronAuto(queued))}window.postMessage({type:'LIH_TRON_SYNC_REQUEST'},location.origin);checkTaskReminders();loadAppleCalendar();receiveTronShare()});
 })();
 </script>
 </body></html>
