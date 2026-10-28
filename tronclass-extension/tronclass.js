@@ -133,7 +133,7 @@
     const selectedById = new Map(selected.map(c => [String(c.id), c]));
     const assignments = new Map();
     const diagnostics = { totalCourses: courses.length, matchedCourses: selected.length,
-      todosFound: 0, todosMatched: 0, homeworkMatched: 0 };
+      todosFound: 0, todosMatched: 0, homeworkMatched: 0, failedCourses: 0 };
     function add(item) {
       if (!item) return;
       const duplicate = [...assignments.values()].find(previous =>
@@ -165,8 +165,15 @@
       if (!Number.isSafeInteger(Number(course.id))) continue;
       let page = 1, pages = 1;
       do {
-        const result = await getJson('/api/courses/' + encodeURIComponent(course.id) +
-          '/homework-activities?page=' + page + '&page_size=100');
+        let result;
+        try {
+          result = await getJson('/api/courses/' + encodeURIComponent(course.id) +
+            '/homework-activities?page=' + page + '&page_size=100');
+        } catch (error) {
+          if (/登入已失效/.test(String(error?.message))) throw error;
+          diagnostics.failedCourses++;
+          break;
+        }
         if (!Array.isArray(result.homework_activities)) throw new Error((course.name || '某堂課') + '的作業資料格式不符。');
         for (const raw of result.homework_activities) {
           const item = normalizeHomework(course, raw);
@@ -180,7 +187,7 @@
     }
     return { source:'tronclass.scu.edu.tw', term, termMode:'current',
       fetchedAt:new Date().toISOString(), courses:selected.length,
-      assignments:[...assignments.values()], diagnostics };
+      assignments:[...assignments.values()], diagnostics, partial: diagnostics.failedCourses > 0 };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
