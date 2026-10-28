@@ -144,6 +144,32 @@
     };
   }
 
+  function normalizeExam(course, exam) {
+    if (!exam || course.id == null) return null;
+    const id = exam.id ?? exam.exam_id ?? exam.activity_id;
+    const title = text(exam.title || exam.name || exam.exam_name, 180);
+    if (id == null || !title) return null;
+    const status = text(exam.submission_status || exam.status, 80).toLowerCase();
+    if (exam.is_submitted === true || exam.submitted === true ||
+        exam.completed === true || exam.is_completed === true ||
+        /^(completed|submitted|graded|finished|已完成|已交卷|已繳交)$/.test(status)) return null;
+    const start = timeParts(exam.exam_at || exam.exam_time || exam.start_at || exam.start_time || exam.begin_at);
+    const end = timeParts(exam.end_at || exam.end_time || exam.due_at || exam.deadline);
+    const when = start || end;
+    const link = text(exam.url || exam.link, 500);
+    return {
+      key: `tron:${course.id}:exam:${id}`,
+      course: text(course.name, 120), courseId: String(course.id), activityId: String(id),
+      originalTitle: title, title: text(course.name,120) + '｜' + title,
+      startDate: start?.date || when?.date || '', startTime: start?.time || '00:00',
+      date: end?.date || when?.date || '', time: end?.time || '',
+      status: '待確認', kind: 'exam', category: '考試／報告',
+      description: text(exam.description || exam.content, 500),
+      link: /^https:\/\/tronclass\.scu\.edu\.tw(?:\/|$)/.test(link) ? link : 'https://tronclass.scu.edu.tw/',
+      source: 'auto',
+    };
+  }
+
   async function scan() {
     if (document.querySelector('input[type="password"]')) throw new Error('請先登入 TronClass 再同步。');
     // Get all enrolled courses: ended courses may still have overdue submissions.
@@ -175,7 +201,7 @@
     const selectedById = new Map(selected.map(c => [String(c.id), c]));
     const assignments = new Map();
     const diagnostics = { totalCourses: courses.length, matchedCourses: selected.length,
-      todosFound: 0, todosMatched: 0, homeworkMatched: 0, failedCourses: 0,
+      todosFound: 0, todosMatched: 0, homeworkMatched: 0, examsMatched: 0, failedCourses: 0,
       targetCourses: userSelection ? TARGET_COURSES.length : null,
       missingCourses: userSelection ? userSelection.missing : [] };
     function add(item) {
@@ -228,6 +254,16 @@
         page++;
       } while (page <= pages);
       if (assignments.size > 1500) throw new Error('作業資料過多，已停止同步以保護瀏覽器。');
+    }
+    // Exams are a separate TronClass activity type, not homework deadlines.
+    for (const course of selected) {
+      if (!Number.isSafeInteger(Number(course.id))) continue;
+      const exams = await optionalList('/api/courses/' + encodeURIComponent(course.id) + '/exam-list', 'exams');
+      if (!exams) continue;
+      for (const raw of exams.slice(0,200)) {
+        const item = normalizeExam(course, raw);
+        if (item) { add(item); diagnostics.examsMatched++; }
+      }
     }
     return { source:'tronclass.scu.edu.tw', term, termMode:'current',
       fetchedAt:new Date().toISOString(), courses:selected.length,
