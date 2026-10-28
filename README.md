@@ -18,4 +18,4 @@
 
 ## TronClass 自動同步
 
-網站保留原本的手動課務匯入，另外提供電腦版 Chrome 的配套擴充功能：使用**已登入 TronClass 的瀏覽器工作階段**，每 30 分鐘檢查各科作業並存入待確認清單，不需將學校密碼交給時間管理網站。安裝方式與限制見 [`tronclass-extension/README.md`](tronclass-extension/README.md)。
+網站使用電腦版 Chrome 配套擴充功能（v0.3.0），從**已登入 TronClass 的瀏覽器工作階段**每 30 分鐘依當前學年學期同步未繳作業到待確認清單。不顯示舊 Safari 程式碼與手動貼上介面；不需把學校密碼交給時間管理網站。安裝方式與限制見 [`tronclass-extension/README.md`](tronclass-extension/README.md)。
