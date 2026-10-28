@@ -29,7 +29,11 @@
     return String(year) + '-' + (parts.month >= 8 || parts.month === 1 ? '1' : '2');
   }
 
-  function courseAcademicTerm(course) {
+  function courseAcademicTerm(course, semesterIndex = new Map(), yearIndex = new Map()) {
+    const semesterInfo = semesterIndex.get(String(course.semester_id ?? ''));
+    const yearInfo = yearIndex.get(String(course.academic_year_id ?? semesterInfo?.academic_year_id ?? ''));
+    course = {...course, semester: course.semester || course.semester_name || semesterInfo,
+      academic_year: course.academic_year || course.academic_year_name || yearInfo};
     const name = v => typeof v === 'object' && v !== null
       ? String(v.name ?? v.title ?? v.display_name ?? '') : String(v ?? '');
     const academicYear = name(course.academic_year || course.academicYear ||
@@ -66,26 +70,33 @@
     return response.json();
   }
 
-  function normalizeHomework(course, activity) {
-    if (!activity || activity.id == null || course.id == null) return null;
-    const courseName = text(course.name, 120), originalTitle = text(activity.title || activity.name, 180);
+  function normalizeHomework(course, activity, fromTodo = false) {
+    if (!activity || course.id == null) return null;
+    const activityId = activity.activity_id ?? activity.homework_activity_id ?? activity.assignment_id ?? activity.id;
+    if (activityId == null) return null;
+    const courseName = text(course.name || activity.course_name, 120), originalTitle = text(activity.title || activity.name, 180);
     if (!courseName || !originalTitle) return null;
-    const due = timeParts(activity.due_at || activity.end_at || activity.end_time || activity.deadline || activity.close_at);
+    const due = timeParts(activity.due_at || activity.due_date || activity.end_at || activity.end_date || activity.end_time || activity.deadline || activity.close_at);
     const open = timeParts(activity.start_at || activity.open_at || activity.start_time || activity.begin_at);
-    const statusText = text(activity.status || activity.submission_status, 50).toLowerCase();
-    const explicitPending = /unsubmitted|not[_-]?submitted|pending|not[_-]?started|未繳|未交|未提交/.test(statusText);
+    const statusText = text(activity.status, 50).toLowerCase();
+    const submitText = text(activity.submission_status || activity.submit_status, 50).toLowerCase();
+    const pendingPattern = /unsubmitted|not[_ -]?submitted|pending|未繳|未交|未提交/;
+    const explicitPending = activity.submitted === false || activity.is_submitted === false ||
+      pendingPattern.test(statusText) || pendingPattern.test(submitText);
     const submitted = activity.submitted === true || activity.is_submitted === true ||
       !!activity.submitted_at || !!activity.submission?.submitted_at ||
-      (!explicitPending && /submitted|completed|finished|graded|已繳|已交|已提交/.test(statusText));
-    if (submitted) return null;
+      /^(submitted|completed|graded|已繳|已交|已提交)$/.test(submitText) ||
+      (/^(submitted|已繳|已交|已提交)$/.test(statusText) && !explicitPending);
+    // Do not confuse an ended activity with an already-submitted assignment.
+    if (submitted || (!fromTodo && !explicitPending)) return null;
     const link = text(activity.url || activity.link || '', 500);
     return {
-      key: `tron:${course.id}:${activity.id}`,
-      course: courseName, courseId: String(course.id), activityId: String(activity.id),
+      key: `tron:${course.id}:${activityId}`,
+      course: courseName, courseId: String(course.id), activityId: String(activityId),
       originalTitle, title: `${courseName}｜${originalTitle}`,
       startDate: (open || due)?.date || '', startTime: open?.time || '00:00',
       date: due?.date || '', time: due?.time || '',
-      status: explicitPending || activity.submitted === false || activity.is_submitted === false ? '未繳' : '待確認',
+      status: '未繳',
       kind: 'task', category: '考試／報告',
       description: text(activity.description || activity.content, 500),
       link: /^https:\/\/tronclass\.scu\.edu\.tw(?:\/|$)/.test(link) ? link : 'https://tronclass.scu.edu.tw/',
@@ -95,33 +106,81 @@
 
   async function scan() {
     if (document.querySelector('input[type="password"]')) throw new Error('請先登入 TronClass 再同步。');
-    const fields = 'id,name,course_code,display_name,academic_year_id,semester_id,academic_year(id,name),semester(id,name)';
-    const conditions = { status: ['ongoing'], keyword: '' };
-    const coursesResult = await getJson('/api/my-courses?conditions=' + encodeURIComponent(JSON.stringify(conditions)) + '&fields=' + encodeURIComponent(fields) + '&page=1&page_size=100');
+    // Get all enrolled courses: ended courses may still have overdue submissions.
+    const coursesResult = await getJson('/api/my-courses');
     const courses = coursesResult?.courses;
     if (!Array.isArray(courses)) throw new Error('TronClass 課程資料格式不符，請確認學校平台是否更新。');
-    if (!courses.length) throw new Error('沒有找到進行中的課程；請確認 TronClass 的學期與登入狀態。');
-    if (courses.length > 100) throw new Error('課程數量異常，已停止同步避免大量請求。');
+    if (!courses.length) throw new Error('TronClass 未回傳課程，請確認登入狀態。');
+    if (courses.length > 200) throw new Error('課程數量異常，已停止同步。');
+    async function optionalList(path, key) {
+      try {
+        const result = await getJson(path);
+        return Array.isArray(result?.[key]) ? result[key] : null;
+      } catch (error) {
+        if (/登入已失效/.test(String(error?.message))) throw error;
+        return null;
+      }
+    }
+    const [semesters, years] = await Promise.all([
+      optionalList('/api/my-semesters', 'semesters'),
+      optionalList('/api/my-academic-years', 'academic_years'),
+    ]);
+    const semesterIndex = new Map((semesters || []).map(x => [String(x.id), x]));
+    const yearIndex = new Map((years || []).map(x => [String(x.id), x]));
     const term = currentAcademicTerm();
-    const selected = courses.filter(course => courseAcademicTerm(course) === term);
-    if (!selected.length) throw new Error('無法從 TronClass 課程資料確認當前學期 ' + term + '。已保留原有資料，不會混入其他學期。');
-    const assignments = [];
+    const selected = courses.filter(c => courseAcademicTerm(c, semesterIndex, yearIndex) === term);
+    if (!selected.length) throw new Error('讀取 ' + courses.length + ' 門課，但無法確認 ' + term + ' 學期課程；已保留既有資料。');
+    const selectedById = new Map(selected.map(c => [String(c.id), c]));
+    const assignments = new Map();
+    const diagnostics = { totalCourses: courses.length, matchedCourses: selected.length,
+      todosFound: 0, todosMatched: 0, homeworkMatched: 0 };
+    function add(item) {
+      if (!item) return;
+      const duplicate = [...assignments.values()].find(previous =>
+        previous.courseId === item.courseId &&
+        previous.originalTitle.normalize('NFKC').trim() === item.originalTitle.normalize('NFKC').trim() &&
+        (!previous.date || !item.date || previous.date === item.date));
+      if (duplicate) {
+        if (item.date && !duplicate.date) Object.assign(duplicate, {date:item.date,time:item.time});
+        return;
+      }
+      assignments.set(item.key, item);
+    }
+    const todos = await optionalList('/api/todos', 'todo_list');
+    if (todos) {
+      diagnostics.todosFound = todos.length;
+      for (const todo of todos) {
+        const id = todo.course_id ?? todo.course?.id;
+        let course = id == null ? null : selectedById.get(String(id));
+        if (!course && typeof todo.course_name === 'string') {
+          const matches = selected.filter(c => c.name === todo.course_name);
+          if (matches.length === 1) course = matches[0];
+        }
+        if (!course) continue;
+        const item = normalizeHomework(course, todo, true);
+        if (item) { add(item); diagnostics.todosMatched++; }
+      }
+    }
     for (const course of selected) {
       if (!Number.isSafeInteger(Number(course.id))) continue;
       let page = 1, pages = 1;
       do {
-        const result = await getJson(`/api/courses/${encodeURIComponent(course.id)}/homework-activities?page=${page}&page_size=100`);
-        if (!Array.isArray(result.homework_activities)) throw new Error(`${course.name || '某堂課'}的作業資料格式不符。`);
+        const result = await getJson('/api/courses/' + encodeURIComponent(course.id) +
+          '/homework-activities?page=' + page + '&page_size=100');
+        if (!Array.isArray(result.homework_activities)) throw new Error((course.name || '某堂課') + '的作業資料格式不符。');
         for (const raw of result.homework_activities) {
           const item = normalizeHomework(course, raw);
-          if (item) assignments.push(item);
+          if (item) { add(item); diagnostics.homeworkMatched++; }
         }
-        pages = Math.min(20, Math.max(1, Number(result.pages) || Math.ceil((Number(result.total) || 0) / (Number(result.page_size) || 100)) || 1));
+        pages = Math.min(20, Math.max(1, Number(result.pages) ||
+          Math.ceil((Number(result.total) || 0) / (Number(result.page_size) || 100)) || 1));
         page++;
       } while (page <= pages);
-      if (assignments.length > 1500) throw new Error('作業資料過多，已停止同步以保護瀏覽器。');
+      if (assignments.size > 1500) throw new Error('作業資料過多，已停止同步以保護瀏覽器。');
     }
-    return { source: 'tronclass.scu.edu.tw', term, termMode: 'current', fetchedAt: new Date().toISOString(), courses: selected.length, assignments };
+    return { source:'tronclass.scu.edu.tw', term, termMode:'current',
+      fetchedAt:new Date().toISOString(), courses:selected.length,
+      assignments:[...assignments.values()], diagnostics };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
