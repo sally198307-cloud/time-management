@@ -3,57 +3,82 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
-const script = readFileSync(new URL('../tronclass-extension/tronclass.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../tronclass-extension/tronclass.js', import.meta.url), 'utf8');
 
-async function runScan(responses) {
+async function scanAt(isoDate, responses) {
   let handler;
-  const fetchedPaths = [];
-  runInNewContext(script, {
+  const paths = [];
+  const FakeDate = class extends Date {
+    constructor(...args) { super(...(args.length ? args : [isoDate])); }
+  };
+  runInNewContext(source, {
     location: { hostname: 'tronclass.scu.edu.tw' },
     document: { querySelector: () => null },
+    Date: FakeDate,
     chrome: { runtime: { onMessage: { addListener(callback) { handler = callback; } } } },
     fetch: async path => {
-      fetchedPaths.push(path);
-      const data = responses.find(item => item.match.test(path));
-      if (!data) throw Error(`Unexpected request: ${path}`);
-      return { ok: data.status === undefined, status: data.status || 200,
-        headers: { get: () => 'application/json' }, json: async () => data.body };
+      paths.push(path);
+      const match = responses.find(item => item.match.test(path));
+      if (!match) throw new Error('Unexpected request: ' + path);
+      return { ok: !match.status, status: match.status || 200,
+        headers: { get: () => 'application/json' }, json: async () => match.body };
     },
   });
-  const result = await new Promise(resolve => handler({ type: 'TRONCLASS_SCAN' }, {}, resolve));
-  return { result, fetchedPaths };
+  const result = await new Promise(resolve => handler({type:'TRONCLASS_SCAN'}, {}, resolve));
+  return {result, paths};
 }
 
-test('collects all ongoing courses, paginated homework, stable identifiers, and Taipei deadlines', async () => {
-  const { result, fetchedPaths } = await runScan([
-    { match: /\/api\/my-courses/, body: { courses: [{ id: 101, name: '資料庫管理' }, { id: 202, name: 'PHP 與 MySQL' }] } },
-    { match: /courses\/101\/homework-activities\?page=1/, body: { pages: 2, homework_activities: [
-      { id: 11, title: 'SQL 第五週', due_at: '2026-10-27T08:30:00Z', start_at: '2026-10-21 09:00:00', status: 'unsubmitted' },
-    ] } },
-    { match: /courses\/101\/homework-activities\?page=2/, body: { pages: 2, homework_activities: [
-      { id: 12, title: 'ERD 報告', due_at: '2026-11-03T12:00:00+08:00', submitted_at: '2026-10-26T02:00:00Z' },
-    ] } },
-    { match: /courses\/202\/homework-activities/, body: { pages: 1, homework_activities: [
-      { id: 31, title: '第三次作業' },
-    ] } },
+const courses = [
+  {id: 11, name: '資料庫管理', academic_year: {name: '115學年度'}, semester: {name: '第一學期'}},
+  {id: 22, name: 'Java', academic_year: {name: '115學年度'}, semester: {name: '第2學期'}},
+  {id: 33, name: '舊課程', academic_year: {name: '114'}, semester: {name: '1'}},
+];
+
+test('October selects 115-1 only and excludes submitted homework', async () => {
+  const {result, paths} = await scanAt('2026-10-28T06:00:00Z', [
+    {match:/\/api\/my-courses/,body:{courses}},
+    {match:/\/courses\/11\/homework-activities/,body:{pages:1,homework_activities:[
+      {id:101,title:'SQL 練習',due_at:'2026-11-10T12:00:00+08:00',status:'unsubmitted'},
+      {id:102,title:'已交的作業',due_at:'2026-11-12T12:00:00+08:00',status:'submitted'},
+      {id:103,title:'考試通知',status:'pending'},
+    ]}},
   ]);
-  assert.equal(result.ok, true);
-  assert.equal(result.snapshot.courses, 2);
-  assert.equal(result.snapshot.assignments.length, 3);
-  assert.equal(result.snapshot.assignments[0].key, 'tron:101:11');
-  assert.equal(result.snapshot.assignments[0].date, '2026-10-27');
-  assert.equal(result.snapshot.assignments[0].time, '16:30');
-  assert.equal(result.snapshot.assignments[0].startTime, '09:00');
-  assert.equal(result.snapshot.assignments[1].status, '已繳');
-  assert.equal(result.snapshot.assignments[2].date, '');
-  assert.equal(fetchedPaths.length, 4);
+  assert.equal(result.ok,true, JSON.stringify(result));
+  assert.equal(result.snapshot.term,'115-1');
+  assert.equal(result.snapshot.termMode,'current');
+  assert.equal(result.snapshot.courses,1);
+  assert.equal(result.snapshot.assignments.length,2);
+  assert.equal(result.snapshot.assignments[0].status,'未繳');
+  assert.equal(result.snapshot.assignments[0].date,'2026-11-10');
+  assert.equal(paths.length,2);
 });
 
-test('reports expired school login without trying password authentication', async () => {
-  const { result, fetchedPaths } = await runScan([
-    { match: /\/api\/my-courses/, status: 401 },
+test('March selects 115-2 without code changes', async () => {
+  const {result,paths}=await scanAt('2027-03-02T03:00:00Z',[
+    {match:/\/api\/my-courses/,body:{courses}},
+    {match:/\/courses\/22\/homework-activities/,body:{pages:1,homework_activities:[{id:201,title:'Java 專題',status:'not_submitted'}]}},
   ]);
-  assert.equal(result.ok, false);
-  assert.match(result.error, /登入已失效/);
-  assert.equal(fetchedPaths.length, 1);
+  assert.equal(result.ok,true, JSON.stringify(result));
+  assert.equal(result.snapshot.term,'115-2');
+  assert.equal(result.snapshot.assignments[0].key,'tron:22:201');
+  assert.equal(result.snapshot.assignments[0].status,'未繳');
+  assert.equal(paths.length,2);
+});
+
+test('does not sync another term if current term cannot be identified', async () => {
+  const {result,paths}=await scanAt('2027-03-02T03:00:00Z',[
+    {match:/\/api\/my-courses/,body:{courses:[courses[0]]}},
+  ]);
+  assert.equal(result.ok,false);
+  assert.match(result.error,/115-2/);
+  assert.equal(paths.length,1);
+});
+
+test('stops at expired login without trying a password', async () => {
+  const {result,paths}=await scanAt('2026-10-28T06:00:00Z',[
+    {match:/\/api\/my-courses/,status:401},
+  ]);
+  assert.equal(result.ok,false);
+  assert.match(result.error,/登入已失效/);
+  assert.equal(paths.length,1);
 });
