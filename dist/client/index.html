@@ -1096,8 +1096,11 @@ completion("https://time-management.5f6g5w9r9m.workers.dev/#tron-share=" +
       renderTron();return;
     }
     if(!/^\d{4}-\d{2}-\d{2}T/.test(snapshot.fetchedAt)||snapshot.assignments.length>1500){tronAutoError='同步資料格式不正確。';renderTron();return}
+    if(snapshot.term!=='115-1'){tronAutoError='請更新 Chrome 擴充功能至 0.2.0，才能僅同步 115-1 未繳作業。';renderTron();return}
     if(state.tronLastAutoSync===snapshot.fetchedAt){renderTron();return}
     state.tronInbox=Array.isArray(state.tronInbox)?state.tronInbox:[];
+    const activeKeys=new Set(snapshot.assignments.map(item=>item?.key).filter(Boolean));
+    state.tronInbox=state.tronInbox.filter(item=>item.source!=='auto'||activeKeys.has(item.key));
     let added=0;
     for(const item of snapshot.assignments){
       if(!/^tron:\d+:\d+$/.test(item?.key||'')||typeof item.course!=='string'||typeof item.originalTitle!=='string'||!item.course.trim()||!item.originalTitle.trim())continue;
