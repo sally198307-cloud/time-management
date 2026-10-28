@@ -1017,7 +1017,9 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
   let tronAutoError='',tronAutoReady=false,tronQueuedSnapshot=null;
   function renderTron(){
     const autoStatus=$('#tronAutoStatus');
-    autoStatus.textContent=tronAutoError?'同步異常：'+tronAutoError+(state.tronLastAutoSync?' · 上次成功 '+appleSyncTime(state.tronLastAutoSync):''):state.tronLastAutoTerm?'目前學期 '+state.tronLastAutoTerm+' · 上次同步 '+appleSyncTime(state.tronLastAutoSync)+' · '+(state.tronAutoCourseCount||0)+' 門課 · '+(state.tronAutoAssignmentCount||0)+' 筆未繳作業':'尚未收到目前學期的自動同步資料。請安裝新版 Chrome 擴充功能並登入 TronClass。';
+    const info=state.tronAutoDiagnostics||{};
+    const debug=info.totalCourses!=null?' · 課程辨識 '+(info.matchedCourses||0)+'/'+info.totalCourses+' · 待辦來源 '+(info.todosMatched||0)+'/'+(info.todosFound||0)+(info.failedCourses?' · '+info.failedCourses+' 門課讀取失敗':''):'';
+    autoStatus.textContent=tronAutoError?'同步異常：'+tronAutoError+(state.tronLastAutoSync?' · 上次成功 '+appleSyncTime(state.tronLastAutoSync):'')+debug:state.tronLastAutoTerm?'目前學期 '+state.tronLastAutoTerm+' · 上次同步 '+appleSyncTime(state.tronLastAutoSync)+' · '+(state.tronAutoCourseCount||0)+' 門課 · '+(state.tronAutoAssignmentCount||0)+' 筆未繳作業'+debug:'尚未收到目前學期的自動同步資料。請安裝新版 Chrome 擴充功能並登入 TronClass。';
     const pending=tronPending();$('#tronHomeNotice').hidden=!pending.length;$('#tronHomeCount').textContent=pending.length+' 筆 TronClass 課務待確認';
     if(pending.length){$('.nav button[data-view="apple"]').hidden=false;$('.nav').classList.remove('apple-quiet')}
     $('#tronReview').innerHTML=pending.length?pending.map((x,i)=>{
@@ -1060,9 +1062,14 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
     if(!/^\d{4}-\d{2}-\d{2}T/.test(snapshot.fetchedAt)||snapshot.assignments.length>1500){tronAutoError='同步資料格式不正確。';renderTron();return}
     if(snapshot.termMode!=='current'||!/^\d{2,3}-[12]$/.test(snapshot.term||'')){tronAutoError='請更新 Chrome 擴充功能至 0.3.0，才能自動切換學期。';renderTron();return}
     if(state.tronLastAutoSync===snapshot.fetchedAt){renderTron();return}
+    const diag=snapshot.diagnostics||{};
+    if(snapshot.assignments.length===0){
+      tronAutoError='已讀取本學期 '+snapshot.term+' 的 '+(diag.matchedCourses??snapshot.courses)+' 門課，但沒有取得可確認的未繳作業（待辦 '+(diag.todosMatched||0)+'/'+(diag.todosFound||0)+'）。已保留舊資料，請確認 TronClass 待辦及登入狀態。';
+      renderTron();return;
+    }
     state.tronInbox=Array.isArray(state.tronInbox)?state.tronInbox:[];
     const activeKeys=new Set(snapshot.assignments.map(item=>item?.key).filter(Boolean));
-    state.tronInbox=state.tronInbox.filter(item=>item.source!=='auto'||(item.term===snapshot.term&&activeKeys.has(item.key)));
+    state.tronInbox=state.tronInbox.filter(item=>item.source!=='auto'||snapshot.partial||(item.term===snapshot.term&&activeKeys.has(item.key)));
     let added=0;
     for(const item of snapshot.assignments){
       if(!/^tron:\d+:\d+$/.test(item?.key||'')||typeof item.course!=='string'||typeof item.originalTitle!=='string'||!item.course.trim()||!item.originalTitle.trim())continue;
@@ -1073,10 +1080,12 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
         if(old.date!==x.date||old.time!==x.time||old.startDate!==x.startDate||old.status!==x.status||old.originalTitle!==x.originalTitle){Object.assign(old,x,{resolved:false});added++}
       }else{state.tronInbox.push({...x,resolved:!!match&&match.tronSourceDate===x.date&&match.tronSourceTime===x.time});added++}
     }
+    state.tronAutoDiagnostics=diag;
     state.tronLastAutoTerm=snapshot.term;
     state.tronLastAutoSync=snapshot.fetchedAt;
     state.tronAutoCourseCount=Math.max(0,Number(snapshot.courses)||0);
     state.tronAutoAssignmentCount=snapshot.assignments.length;
+    if(snapshot.partial)tronAutoError='有 '+(diag.failedCourses||0)+' 門課作業讀取失敗，已保留舊清單。已找到的待辦仍可查看。';
     await save({recordUndo:false});render();
     if(added&&$('#tronDialog').open)$('#tronMessage').textContent='自動同步帶來 '+added+' 筆新增／更新作業，請確認後再加入任務。';
   }
