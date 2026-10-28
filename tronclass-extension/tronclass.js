@@ -18,23 +18,43 @@
     return { date: `${pieces.year}-${pieces.month}-${pieces.day}`, time: `${pieces.hour}:${pieces.minute}` };
   };
 
-  const TARGET_TERM = '115-1';
-  // Filter using official course metadata, not homework deadlines.
-  // Academic-year and semester IDs are opaque; "semester_id = 1" is not safe.
-  function currentSemester(course) {
-    const value = field => typeof field === 'object' && field !== null
-      ? String(field.name || field.title || field.display_name || '') : String(field ?? '');
-    const year = value(course.academic_year || course.academicYear || course.academic_year_name || course.school_year);
-    const term = value(course.semester || course.semester_name || course.term || course.term_name);
-    const combined = [year, term, value(course.display_name)].join(' ').normalize('NFKC');
-    const isYear = /(?:^|\D)115(?:\D|$)/.test(year) || /\b2026\s*[-~–]\s*2027\b/.test(year) || /\b2026\b/.test(year);
-    const isFirst = /(?:^|\D)1(?:\D|$)/.test(term) || /(?:第?[一1]學期|上學期|first\s*semester|fall)/i.test(term);
-    if (isYear && isFirst) return true;
-    if (/(?:^|\D)115\s*[-/／]\s*1(?:\D|$)|2026\s*[-~–]\s*2027\s*[-/]\s*1/.test(combined)) return true;
-    // Course-code fallback only when explicit year/term fields are absent.
-    const code = String(course.course_code || course.code || '');
-    if (!year && !term && /^1151[A-Za-z]/.test(code)) return true;
-    return false;
+  // Match a semester from the school's course metadata. Course IDs are not semester numbers.
+  // Taiwan's school-year calendar determines which named semester we are looking for,
+  // but we never take courses from a different term just because they are marked ongoing.
+  function currentAcademicTerm(now = new Date()) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Taipei', year: 'numeric', month: 'numeric',
+    }).formatToParts(now).filter(p => p.type !== 'literal').map(p => [p.type, Number(p.value)]));
+    const year = (parts.month >= 8 ? parts.year : parts.year - 1) - 1911;
+    return String(year) + '-' + (parts.month >= 8 || parts.month === 1 ? '1' : '2');
+  }
+
+  function courseAcademicTerm(course) {
+    const name = v => typeof v === 'object' && v !== null
+      ? String(v.name ?? v.title ?? v.display_name ?? '') : String(v ?? '');
+    const academicYear = name(course.academic_year || course.academicYear ||
+      course.academic_year_name || course.school_year || course.year).normalize('NFKC');
+    const semester = name(course.semester || course.semester_name ||
+      course.term || course.term_name).normalize('NFKC');
+    const yearMatch = academicYear.match(/(?:^|[^\d])((?:1[01]\d|12\d|20\d{2}))(?!\d)/);
+    let year = yearMatch ? Number(yearMatch[1]) : null;
+    if (year >= 2000) year -= 1911;
+    const semesterMatch = semester.match(/(?:^|[^\d])([12])(?!\d)/);
+    let semesterNum = semesterMatch ? Number(semesterMatch[1]) : null;
+    if (!semesterNum && /上學期|第一學期|秋季|fall|first/i.test(semester)) semesterNum = 1;
+    if (!semesterNum && /下學期|第二學期|春季|spring|second/i.test(semester)) semesterNum = 2;
+    // Names can include a combined term even when separate fields are unavailable.
+    if (!year || !semesterNum) {
+      const combined = [academicYear, semester, name(course.display_name),
+        name(course.course_code || course.code)].join(' ').normalize('NFKC');
+      const match = combined.match(/(?:^|[^\d])((?:1[01]\d|12\d|20\d{2}))\s*[-/／_]\s*([12])(?!\d)/);
+      if (match) {
+        year = Number(match[1]);
+        if (year >= 2000) year -= 1911;
+        semesterNum = Number(match[2]);
+      }
+    }
+    return year && semesterNum ? String(year) + '-' + semesterNum : null;
   }
 
   async function getJson(path) {
@@ -82,8 +102,9 @@
     if (!Array.isArray(courses)) throw new Error('TronClass 課程資料格式不符，請確認學校平台是否更新。');
     if (!courses.length) throw new Error('沒有找到進行中的課程；請確認 TronClass 的學期與登入狀態。');
     if (courses.length > 100) throw new Error('課程數量異常，已停止同步避免大量請求。');
-    const selected = courses.filter(currentSemester);
-    if (!selected.length) throw new Error('沒有辨識到 115-1 課程：請確認學期欄位，避免誤抓其他學期。');
+    const term = currentAcademicTerm();
+    const selected = courses.filter(course => courseAcademicTerm(course) === term);
+    if (!selected.length) throw new Error('無法從 TronClass 課程資料確認當前學期 ' + term + '。已保留原有資料，不會混入其他學期。');
     const assignments = [];
     for (const course of selected) {
       if (!Number.isSafeInteger(Number(course.id))) continue;
@@ -100,7 +121,7 @@
       } while (page <= pages);
       if (assignments.length > 1500) throw new Error('作業資料過多，已停止同步以保護瀏覽器。');
     }
-    return { source: 'tronclass.scu.edu.tw', term: TARGET_TERM, fetchedAt: new Date().toISOString(), courses: selected.length, assignments };
+    return { source: 'tronclass.scu.edu.tw', term, termMode: 'current', fetchedAt: new Date().toISOString(), courses: selected.length, assignments };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
