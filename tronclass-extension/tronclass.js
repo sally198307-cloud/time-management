@@ -61,6 +61,46 @@
     return year && semesterNum ? String(year) + '-' + semesterNum : null;
   }
 
+  // Explicit 115-1 whitelist from the user's course list.
+  // IDs are used when known; names must match the whole normalized course name.
+  const TARGET_COURSES = [
+    {name:'AI應用新手村-iPAS AI應用規劃師考照初階引導工作坊'},
+    {name:'資訊管理',id:138917},
+    {name:'人工智慧服務設計',id:141965},
+    {name:'計算機程式設計',id:139520},
+    {name:'資料庫管理'},
+    {name:'富蘭克林講座－金融投資與資產管理(Ａ組)'},
+    {name:'職涯錨定(５１企ＡＢ)'},
+    {name:'人工智慧跨域應用(５１企ＡＢ)'},
+    {name:'專業ｏｆｆｉｃｅ套裝軟體（一）(城中校區)'},
+    {name:'ＰＨＰ與ＭＹＳＱＬ資料庫程式初探(資訊遠距)',id:140504},
+    {name:'115-1 TA training'},
+  ];
+  const normCourse = name => String(name || '').normalize('NFKC')
+    .replace(/[\s（）()－—–-]/g,'').toLowerCase();
+  function selectedUserCourses(courses, term, semesters, years) {
+    if (term !== '115-1') return null; // Explicit list applies to 115-1 only.
+    const used = new Set();
+    const selected = [];
+    const missing = [];
+    for (const target of TARGET_COURSES) {
+      const byId = target.id != null ? courses.find(c => String(c.id) === String(target.id)) : null;
+      // For a name-only course, do not select one of several ambiguous names
+      // unless course semester metadata identifies the 115-1 class.
+      const names = byId ? [byId] : courses.filter(c => normCourse(c.name) === normCourse(target.name));
+      const candidates = names.filter(c => !used.has(String(c.id)));
+      const exactTerm = candidates.filter(c => courseAcademicTerm(c, semesters, years) === term);
+      const eligible = exactTerm.length ? exactTerm : candidates.filter(c => {
+        const t = courseAcademicTerm(c, semesters, years);
+        return t === null || t === term;
+      });
+      const chosen = byId ? eligible[0] : eligible.length === 1 ? eligible[0] : null;
+      if (chosen) {selected.push(chosen);used.add(String(chosen.id));}
+      else missing.push(target.name);
+    }
+    return {selected,missing};
+  }
+
   async function getJson(path) {
     const response = await fetch(path, { credentials: 'include', headers: { Accept: 'application/json' }, cache: 'no-store' });
     if (response.status === 401 || response.status === 403) throw new Error('TronClass 登入已失效，請先在東吳 TronClass 重新登入。');
@@ -128,12 +168,16 @@
     const semesterIndex = new Map((semesters || []).map(x => [String(x.id), x]));
     const yearIndex = new Map((years || []).map(x => [String(x.id), x]));
     const term = currentAcademicTerm();
-    const selected = courses.filter(c => courseAcademicTerm(c, semesterIndex, yearIndex) === term);
-    if (!selected.length) throw new Error('讀取 ' + courses.length + ' 門課，但無法確認 ' + term + ' 學期課程；已保留既有資料。');
+    const userSelection = selectedUserCourses(courses, term, semesterIndex, yearIndex);
+    const selected = userSelection ? userSelection.selected
+      : courses.filter(c => courseAcademicTerm(c, semesterIndex, yearIndex) === term);
+    if (!selected.length) throw new Error('讀取 ' + courses.length + ' 門課，但找不到指定的 ' + term + ' 課程；已保留既有資料。');
     const selectedById = new Map(selected.map(c => [String(c.id), c]));
     const assignments = new Map();
     const diagnostics = { totalCourses: courses.length, matchedCourses: selected.length,
-      todosFound: 0, todosMatched: 0, homeworkMatched: 0, failedCourses: 0 };
+      todosFound: 0, todosMatched: 0, homeworkMatched: 0, failedCourses: 0,
+      targetCourses: userSelection ? TARGET_COURSES.length : null,
+      missingCourses: userSelection ? userSelection.missing : [] };
     function add(item) {
       if (!item) return;
       const duplicate = [...assignments.values()].find(previous =>
