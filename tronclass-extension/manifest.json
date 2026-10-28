@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TronClass → 時間管理（東吳）",
-  "version": "0.4.0",
-  "description": "在已登入 TronClass 的 Chrome 中依目前學期同步 TronClass 待辦和未繳交作業並匯入個人時間管理網站。",
+  "version": "0.5.0",
+  "description": "在已登入 TronClass 的 Chrome 中以指定課程清單同步 115-1 未繳交作業及待辦並匯入個人時間管理網站。",
   "permissions": ["alarms", "storage", "tabs"],
   "host_permissions": [
     "https://tronclass.scu.edu.tw/*",
