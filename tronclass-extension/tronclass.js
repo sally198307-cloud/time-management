@@ -269,6 +269,7 @@
     }
     return { source:'tronclass.scu.edu.tw', term, termMode:'current',
       fetchedAt:new Date().toISOString(), courses:selected.length,
+      courseNames:selected.map(c => text(c.name || c.title || c.course_name || c.display_name,120)).filter(Boolean),
       assignments:[...assignments.values()], diagnostics, partial: diagnostics.failedCourses > 0 };
   }
 
