@@ -1,17 +1,41 @@
 {
   "manifest_version": 3,
   "name": "TronClass → 時間管理（東吳）",
-  "version": "0.5.0",
-  "description": "在已登入 TronClass 的 Chrome 中以指定課程清單同步 115-1 未繳交作業及待辦並匯入個人時間管理網站。",
-  "permissions": ["alarms", "storage", "tabs"],
+  "version": "0.5.1",
+  "description": "115-1 指定課程（含資料庫管理課程代碼）未繳作業與考試同步。",
+  "permissions": [
+    "alarms",
+    "storage",
+    "tabs"
+  ],
   "host_permissions": [
     "https://tronclass.scu.edu.tw/*",
     "https://time-management.5f6g5w9r9m.workers.dev/*"
   ],
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
-    { "matches": ["https://tronclass.scu.edu.tw/*"], "js": ["tronclass.js"], "run_at": "document_idle" },
-    { "matches": ["https://time-management.5f6g5w9r9m.workers.dev/*"], "js": ["time-management.js"], "run_at": "document_idle" }
+    {
+      "matches": [
+        "https://tronclass.scu.edu.tw/*"
+      ],
+      "js": [
+        "tronclass.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://time-management.5f6g5w9r9m.workers.dev/*"
+      ],
+      "js": [
+        "time-management.js"
+      ],
+      "run_at": "document_idle"
+    }
   ],
-  "action": { "default_title": "同步 TronClass 作業" }
+  "action": {
+    "default_title": "同步 TronClass 作業"
+  }
 }
