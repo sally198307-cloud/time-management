@@ -1128,4 +1128,31 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
   setInterval(updateNowLines,10000);setInterval(()=>{renderExams();renderStudyDesk()},60000);setInterval(renderUrgent,60000);setInterval(loadAppleCalendar,300000);setInterval(checkTaskReminders,30000);load().then(()=>{tronAutoReady=true;if(tronQueuedSnapshot){const queued=tronQueuedSnapshot;tronQueuedSnapshot=null;tronAutoQueue=tronAutoQueue.then(()=>receiveTronAuto(queued))}window.postMessage({type:'LIH_TRON_SYNC_REQUEST'},location.origin);checkTaskReminders();loadAppleCalendar()});
 })();
 </script>
+<script>
+// Independent fallback: open TronClass even when another page module fails before binding its buttons.
+(function(){
+  function openPanel(){
+    const panel=document.getElementById('tronDialog');
+    if(!panel)return;
+    const tools=document.getElementById('toolsDialog');
+    try{if(tools&&tools.open)tools.close();}catch(e){}
+    try{if(!panel.open)panel.showModal();}
+    catch(e){panel.setAttribute('open','');panel.style.display='block';panel.style.position='fixed';panel.style.inset='4vh auto auto 5vw';panel.style.zIndex='99999';}
+    const status=document.getElementById('tronAutoStatus');
+    if(status&&!status.textContent.trim())status.textContent='TronClass 視窗已開啟，等待同步資料。';
+  }
+  document.addEventListener('click',function(event){
+    if(event.target.closest('#toolsTron, #tronInboxOpen, #tronHomeOpen')){
+      setTimeout(function(){
+        const panel=document.getElementById('tronDialog');
+        if(panel&&!panel.open)openPanel();
+      },0);
+    }
+    if(event.target.closest('#tronClose')){
+      const panel=document.getElementById('tronDialog');
+      if(panel&&panel.open)panel.close();
+    }
+  },true);
+})();
+</script>
 </body></html>
