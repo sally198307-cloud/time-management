@@ -1090,12 +1090,12 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
     state.tronInbox=state.tronInbox.filter(item=>item.source!=='auto'||snapshot.partial||(item.term===snapshot.term&&activeKeys.has(item.key)));
     let added=0;
     for(const item of snapshot.assignments){
-      if(!/^tron:\d+:\d+$/.test(item?.key||'')||typeof item.course!=='string'||typeof item.originalTitle!=='string'||!item.course.trim()||!item.originalTitle.trim())continue;
+      if(!/^tron:\d+:(?:exam:)?\d+$/.test(item?.key||'')||typeof item.course!=='string'||typeof item.originalTitle!=='string'||!item.course.trim()||!item.originalTitle.trim())continue;
       const date=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?value:'',time=value=>/^\d{2}:\d{2}$/.test(value||'')?value:'';
-      const x={key:item.key,term:snapshot.term,course:item.course.slice(0,120),originalTitle:item.originalTitle.slice(0,180),title:String(item.title||item.course+'｜'+item.originalTitle).slice(0,300),startDate:date(item.startDate),startTime:time(item.startTime)||'00:00',date:date(item.date),time:time(item.time),status:['已繳','未繳','待確認'].includes(item.status)?item.status:'待確認',kind:'task',category:'考試／報告',description:String(item.description||'').slice(0,300),link:typeof item.link==='string'&&/^https:\/\/tronclass\.scu\.edu\.tw(?:\/|$)/.test(item.link)?item.link:'',source:'auto'};
+      const x={key:item.key,term:snapshot.term,course:item.course.slice(0,120),originalTitle:item.originalTitle.slice(0,180),title:String(item.title||item.course+'｜'+item.originalTitle).slice(0,300),startDate:date(item.startDate),startTime:time(item.startTime)||'00:00',date:date(item.date),time:time(item.time),status:['已繳','未繳','待確認'].includes(item.status)?item.status:'待確認',kind:item.kind==='exam'?'exam':'task',category:'考試／報告',description:String(item.description||'').slice(0,300),link:typeof item.link==='string'&&/^https:\/\/tronclass\.scu\.edu\.tw(?:\/|$)/.test(item.link)?item.link:'',source:'auto'};
       const old=state.tronInbox.find(t=>t.key===x.key),match=tronMatch(x);
       if(old){
-        if(old.date!==x.date||old.time!==x.time||old.startDate!==x.startDate||old.status!==x.status||old.originalTitle!==x.originalTitle){Object.assign(old,x,{resolved:false});added++}
+        if(old.date!==x.date||old.time!==x.time||old.startDate!==x.startDate||old.status!==x.status||old.originalTitle!==x.originalTitle||old.kind!==x.kind){Object.assign(old,x,{resolved:false});added++}
       }else{state.tronInbox.push({...x,resolved:!!match&&match.tronSourceDate===x.date&&match.tronSourceTime===x.time});added++}
     }
     state.tronAutoDiagnostics=diag;
