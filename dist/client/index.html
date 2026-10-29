@@ -1031,6 +1031,8 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
     const rows=[...$('#tronReview').querySelectorAll('.tron-row')];
     rows.sort((a,b)=>sort==='course'?(a.dataset.course||'').localeCompare(b.dataset.course||'','zh-Hant')||a.dataset.due.localeCompare(b.dataset.due):a.dataset.due.localeCompare(b.dataset.due)||a.dataset.course.localeCompare(b.dataset.course,'zh-Hant'));
     rows.forEach(row=>{row.hidden=(tronTab!=='all'&&row.dataset.kind!==tronTab)||(!!course&&row.dataset.course!==course);$('#tronReview').appendChild(row)});
+    let empty=$('#tronFilteredEmpty');if(!empty){empty=document.createElement('div');empty.id='tronFilteredEmpty';empty.className='empty';$('#tronReview').appendChild(empty)}
+    const visible=rows.filter(row=>!row.hidden).length;empty.hidden=!!visible||!rows.length;empty.textContent=course?'這門課目前沒有待確認的'+(tronTab==='exam'?'考試':tronTab==='task'?'作業':'作業／考試')+'。':'目前篩選條件下沒有待確認項目。';
     $('#tronDialog').querySelectorAll('[data-tron-tab]').forEach(btn=>{const active=btn.dataset.tronTab===tronTab;btn.classList.toggle('active',active);btn.setAttribute('aria-pressed',String(active))});
   }
   let tronAutoError='',tronAutoReady=false,tronQueuedSnapshot=null;
@@ -1043,7 +1045,7 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
     const infoMissing=Array.isArray(info.missingCourses)?info.missingCourses:[];
     $('#tronStats').innerHTML='<div class="tron-stat"><strong>'+esc(state.tronAutoCourseCount||0)+'</strong><span>已配對課程</span></div><div class="tron-stat"><strong>'+pending.filter(x=>x.kind!=='exam').length+'</strong><span>待確認作業</span></div><div class="tron-stat"><strong>'+pending.filter(x=>x.kind==='exam').length+'</strong><span>待確認考試</span></div>'+(infoMissing.length?'<div class="tron-stat"><strong>'+infoMissing.length+'</strong><span>未配對課程：'+esc(infoMissing.join('、'))+'</span></div>':'');
     const courseFilter=$('#tronCourseFilter'),chosen=courseFilter.value;
-    courseFilter.innerHTML='<option value="">全部科目</option>'+[...new Set(pending.map(x=>x.course))].sort((a,b)=>a.localeCompare(b,'zh-Hant')).map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
+    courseFilter.innerHTML='<option value="">全部科目</option>'+[...new Set([...(state.tronAutoCourseNames||[]),...pending.map(x=>x.course)])].sort((a,b)=>a.localeCompare(b,'zh-Hant')).map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
     courseFilter.value=[...courseFilter.options].some(o=>o.value===chosen)?chosen:'';
     $('#tronHomeNotice').hidden=!pending.length;$('#tronHomeCount').textContent=pending.length+' 筆 TronClass 課務待確認';
     if(pending.length){$('.nav button[data-view="apple"]').hidden=false;$('.nav').classList.remove('apple-quiet')}
@@ -1110,6 +1112,7 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
       }else{state.tronInbox.push({...x,resolved:!!match&&match.tronSourceDate===x.date&&match.tronSourceTime===x.time});added++}
     }
     state.tronAutoDiagnostics=diag;
+    if(Array.isArray(snapshot.courseNames))state.tronAutoCourseNames=snapshot.courseNames.filter(x=>typeof x==='string'&&x.length<=120).slice(0,200);
     state.tronLastAutoTerm=snapshot.term;
     state.tronLastAutoSync=snapshot.fetchedAt;
     state.tronAutoCourseCount=Math.max(0,Number(snapshot.courses)||0);
