@@ -68,7 +68,7 @@
     {name:'資訊管理',id:138917},
     {name:'人工智慧服務設計',id:141965},
     {name:'計算機程式設計',id:139520},
-    {name:'資料庫管理'},
+    {name:'資料庫管理',code:'1151BCP30702'},
     {name:'富蘭克林講座－金融投資與資產管理(Ａ組)'},
     {name:'職涯錨定(５１企ＡＢ)'},
     {name:'人工智慧跨域應用(５１企ＡＢ)'},
@@ -85,16 +85,18 @@
     const missing = [];
     for (const target of TARGET_COURSES) {
       const byId = target.id != null ? courses.find(c => String(c.id) === String(target.id)) : null;
+      const byCode = target.code ? courses.filter(c => [c.course_code,c.code,c.courseCode,c.course_no,c.course_number,c.number].some(v => normCourse(v) === normCourse(target.code))) : [];
+      const matchByCode = byCode.length === 1 ? byCode[0] : null;
       // For a name-only course, do not select one of several ambiguous names
       // unless course semester metadata identifies the 115-1 class.
-      const names = byId ? [byId] : courses.filter(c => normCourse(c.name) === normCourse(target.name));
+      const names = byId ? [byId] : matchByCode ? [matchByCode] : courses.filter(c => normCourse(c.name || c.title || c.course_name || c.display_name) === normCourse(target.name));
       const candidates = names.filter(c => !used.has(String(c.id)));
       const exactTerm = candidates.filter(c => courseAcademicTerm(c, semesters, years) === term);
       const eligible = exactTerm.length ? exactTerm : candidates.filter(c => {
         const t = courseAcademicTerm(c, semesters, years);
         return t === null || t === term;
       });
-      const chosen = byId ? eligible[0] : eligible.length === 1 ? eligible[0] : null;
+      const chosen = byId || matchByCode ? eligible[0] : eligible.length === 1 ? eligible[0] : null;
       if (chosen) {selected.push(chosen);used.add(String(chosen.id));}
       else missing.push(target.name);
     }
