@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TronClass → 時間管理（東吳）",
-  "version": "0.5.1",
-  "description": "115-1 指定課程（含資料庫管理課程代碼）未繳作業與考試同步。",
+  "version": "0.5.2",
+  "description": "同步 115-1 課程作業、考試與完整課程名稱，供網站科目篩選使用。",
   "permissions": [
     "alarms",
     "storage",
