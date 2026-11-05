@@ -548,7 +548,7 @@ function pad(n){return n<10?"0"+n:String(n)}
 function date(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
 function minus(d,n){const x=new Date(d+"T12:00:00");x.setDate(x.getDate()-n);return date(x)}
 function done(t,d){return t.daily?(t.completedDates||[]).includes(d):!!t.done}
-function quadrant(t,d){if(t.daily)return "in";if(t.dueDate&&/^\\d{4}-\\d{2}-\\d{2}$/.test(t.dueDate)&&d>=minus(t.dueDate,2)&&!done(t,d))return "iu";return ["iu","in","nu","nn"].includes(t.quadrant)?t.quadrant:t.priority==="high"?"iu":t.priority==="medium"?"in":"nn"}
+function quadrant(t,d){if(t.daily)return "in";if(t.dueDate&&/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate)&&d>=minus(t.dueDate,2)&&!done(t,d))return "iu";return ["iu","in","nu","nn"].includes(t.quadrant)?t.quadrant:t.priority==="high"?"iu":t.priority==="medium"?"in":"nn"}
 function active(t,d){return !!t.date&&(t.daily?t.date<=d:t.date<=d&&d<=(t.dueDate&&t.dueDate>=t.date?t.dueDate:t.date))}
 const QUADS={iu:["重要且緊急","!","#bf5148","#fff0e8"],in:["重要但不緊急","✦","#318876","#ebf7f1"],nu:["緊急但較不重要","↗","#ac8035","#fff7e6"],nn:["不緊急也不重要","·","#758197","#f0f2f6"]};
 const [name,symbol,color,pale]=QUADS[Q],today=date(new Date());
