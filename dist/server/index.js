@@ -146,6 +146,12 @@ function todayWidgetRuntimeSource(_env, origin) {
 const SITE_URL = "__SITE_URL__";
 const API_URL = "__API_URL__";
 const COMPLETE_URL = "__COMPLETE_URL__";
+// Cloudflare Access Service Token is stored only in the Scriptable device Keychain.
+function widgetAccessHeaders() {
+  const id = Keychain.contains("tm_cf_access_id") ? Keychain.get("tm_cf_access_id") : "";
+  const secret = Keychain.contains("tm_cf_access_secret") ? Keychain.get("tm_cf_access_secret") : "";
+  return id && secret ? { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } : {};
+}
 
 const PAPER = new Color("#ffffff"), INK = new Color("#202020"), MUTED = new Color("#8b8b8f");
 const BLUE = new Color("#2488e8"), GREEN = new Color("#42c987"), GRID = new Color("#e8e8ec");
@@ -175,8 +181,9 @@ let actionSucceeded = false;
 if (action === "complete" && taskId) {
   try {
     const completeRequest = new Request(COMPLETE_URL);
+    completeRequest.headers = widgetAccessHeaders();
     completeRequest.method = "POST";
-    completeRequest.headers = { "Content-Type": "application/json" };
+    completeRequest.headers = { ...widgetAccessHeaders(), "Content-Type": "application/json" };
     completeRequest.body = JSON.stringify({ id: taskId, date: args.queryParameters.date || today });
     const result = await completeRequest.loadJSON();
     actionSucceeded = !!(result && result.ok);
@@ -184,6 +191,7 @@ if (action === "complete" && taskId) {
 }
 
 const request = new Request(API_URL + "?refresh=" + Date.now());
+request.headers = widgetAccessHeaders();
 let payload = null, syncError = false;
 try { payload = await request.loadJSON(); } catch (error) { syncError = true; }
 const state = payload && payload.state ? payload.state : { events: [], tasks: [] };
@@ -325,6 +333,12 @@ function calendarWidgetRuntimeSource(_env, origin) {
 // 由「時間管理」網站產生；請勿把這份程式碼分享給其他人。
 const SITE_URL = "__SITE_URL__";
 const API_URL = "__API_URL__";
+// Cloudflare Access Service Token is stored only in the Scriptable device Keychain.
+function widgetAccessHeaders() {
+  const id = Keychain.contains("tm_cf_access_id") ? Keychain.get("tm_cf_access_id") : "";
+  const secret = Keychain.contains("tm_cf_access_secret") ? Keychain.get("tm_cf_access_secret") : "";
+  return id && secret ? { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } : {};
+}
 
 const WIDTH = 329, HEIGHT = 345, SIDE = 10, HEADER = 68;
 const CELL_WIDTH = (WIDTH - SIDE * 2) / 7;
@@ -375,6 +389,7 @@ function splitWeeks(item, calendarStart) {
 }
 
 const request = new Request(API_URL);
+request.headers = widgetAccessHeaders();
 let payload = null, syncError = false;
 try { payload = await request.loadJSON(); } catch (error) { syncError = true; }
 const state = payload && payload.state ? payload.state : { events: [], tasks: [], categories: [] };
@@ -490,6 +505,13 @@ Script.complete();
 function courseWidgetRuntimeSource(env, origin) {
   const source = String.raw`// 本週課表 Widget（Scriptable）
 const SITE_URL="__SITE_URL__",API_URL="__API_URL__";
+// Cloudflare Access Service Token is stored only in the Scriptable device Keychain.
+function widgetAccessHeaders() {
+  const id = Keychain.contains("tm_cf_access_id") ? Keychain.get("tm_cf_access_id") : "";
+  const secret = Keychain.contains("tm_cf_access_secret") ? Keychain.get("tm_cf_access_secret") : "";
+  return id && secret ? { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } : {};
+}
+
 const W=329,H=345,AXIS=29,TOP=67,BOTTOM=337,PAD=5;
 const paper=new Color("#fff"),ink=new Color("#262626"),muted=new Color("#8b8b8b"),grid=new Color("#e8e8e8"),red=new Color("#ef4444");
 function pad(n){return n<10?"0"+n:String(n)}
@@ -502,7 +524,7 @@ function color(name,s){const c=(s.categories||[]).find(function(x){return x.name
 function text(c,v,r,size,col,bold,left){c.setFont(bold?Font.boldSystemFont(size):Font.systemFont(size));c.setTextColor(col);left?c.setTextAlignedLeft():c.setTextAlignedCenter();c.drawTextInRect(String(v),r)}
 function round(c,r,rad,col){const p=new Path();p.addRoundedRect(r,rad,rad);c.addPath(p);c.setFillColor(col);c.fillPath()}
 function layout(items){const sorted=items.slice().sort(function(a,b){return mins(a.start)-mins(b.start)}),groups=[];let group=[],end=-1;sorted.forEach(function(e){const s=mins(e.start);if(group.length&&s>=end){groups.push(group);group=[];end=-1}group.push(e);end=Math.max(end,mins(e.end))});if(group.length)groups.push(group);const out=[];groups.forEach(function(g){const ends=[];const placed=g.map(function(e){let col=ends.findIndex(function(x){return x<=mins(e.start)});if(col<0)col=ends.length;ends[col]=mins(e.end);return{event:e,column:col}});placed.forEach(function(x){x.columns=Math.max(1,ends.length);out.push(x)})});return out}
-let payload=null,error="";try{const req=new Request(API_URL);req.timeoutInterval=15;payload=await req.loadJSON();if(!payload||!payload.state)throw new Error("沒有同步資料")}catch(e){error=String(e)}
+let payload=null,error="";try{const req=new Request(API_URL);req.headers=widgetAccessHeaders();req.timeoutInterval=15;payload=await req.loadJSON();if(!payload||!payload.state)throw new Error("沒有同步資料")}catch(e){error=String(e)}
 const state=payload&&payload.state?payload.state:{events:[],tasks:[],categories:[]},now=new Date(),start=monday(now),finish=add(start,6),days=Array.from({length:7},function(_,i){return add(start,i)});
 const events=(state.events||[]).filter(function(e){return !e.allDay&&course(e)&&e.date>=ymd(start)&&e.date<=ymd(finish)}).sort(function(a,b){return a.date.localeCompare(b.date)||a.start.localeCompare(b.start)});
 const tasks=(state.tasks||[]).filter(function(t){const d=t.dueDate||t.date;const done=t.daily?(t.completedDates||[]).includes(d):!!t.done;return d&&!t.daily&&!done&&d>=ymd(start)&&d<=ymd(finish)});
@@ -523,16 +545,39 @@ function widgetLoaderSource(_env, origin, kind) {
   return String.raw`// 時間管理 Widget 自動更新載入器（Scriptable）
 // 只需要安裝這一次；之後每次執行都會載入網站上的最新版。
 const RUNTIME_URL = "__RUNTIME_URL__";
+const tokenIdKey = "tm_cf_access_id", tokenSecretKey = "tm_cf_access_secret";
+if (!Keychain.contains(tokenIdKey) || !Keychain.contains(tokenSecretKey)) {
+  if (!config.runsInWidget) {
+    const setup = new Alert();
+    setup.title = "設定 Widget 安全連線";
+    setup.message = "請填入 Cloudflare Access Service Token。憑證只會儲存在這台裝置的 Scriptable Keychain，不會寫入網站程式。";
+    setup.addTextField("Client ID");
+    setup.addSecureTextField("Client Secret");
+    setup.addAction("儲存並連線");
+    setup.addCancelAction("取消");
+    if (await setup.present() === 0) {
+      const id = setup.textFieldValue(0).trim();
+      const secret = setup.textFieldValue(1).trim();
+      if (id && secret) { Keychain.set(tokenIdKey, id); Keychain.set(tokenSecretKey, secret); }
+    }
+  }
+}
 try {
+  if (!Keychain.contains(tokenIdKey) || !Keychain.contains(tokenSecretKey)) throw new Error("請先在 Scriptable App 執行此程式以設定連線");
   const request = new Request(RUNTIME_URL);
+  request.headers = {
+    "CF-Access-Client-Id": Keychain.get(tokenIdKey),
+    "CF-Access-Client-Secret": Keychain.get(tokenSecretKey)
+  };
   const latestCode = await request.loadString();
+  if (/<!doctype html|<html[\\s>]/i.test(latestCode.slice(0,200))) throw new Error("Cloudflare Access 尚未授權此裝置");
   await eval("(async function(){\n" + latestCode + "\n})()");
 } catch (error) {
   const widget = new ListWidget();
   widget.backgroundColor = new Color("#ffffff");
   const title = widget.addText("Widget 更新失敗");
   title.font = Font.boldSystemFont(15);
-  const detail = widget.addText("請檢查網路與 Cloudflare Access 登入；不代表行程已清空");
+  const detail = widget.addText(String(error).includes("Service") || String(error).includes("Scriptable") ? "請先打開 Scriptable App 執行 Widget 並設定安全連線" : "請檢查 Cloudflare Access 的 Service Auth 授權；資料未清空");
   detail.font = Font.systemFont(11);
   detail.textColor = new Color("#888888");
   Script.setWidget(widget);
