@@ -138,6 +138,13 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
 .subject-heading h2{font-size:clamp(1.65rem,2.8vw,2rem);line-height:1.3}
 .task-quadrant-cell header h3{font-size:clamp(1rem,1.5vw,1.14rem)}
 @media(max-width:720px){.page-card h2,.chart-card h2,.task-quadrant-heading h2{font-size:1.25rem}.panel-head h3,.week-plan-page h3{font-size:1.1rem}.subject-heading h2{font-size:1.55rem}}
+/* Bilingual title: small editorial English over the Chinese name. */
+.time-brand-title{display:flex;flex-direction:column;justify-content:center;min-width:150px;flex-shrink:0;padding-left:14px;border-left:3px solid var(--violet)}
+.time-brand-english{font-family:Inter,Arial,sans-serif;font-size:.64rem;font-weight:750;letter-spacing:.19em;color:#9b895e;white-space:nowrap;line-height:1.4}
+.time-brand-dot{color:#d4a32c;margin:0 2px}
+.topbar .time-brand-title h1{font-size:clamp(1.65rem,2.6vw,2rem);font-weight:850;letter-spacing:.09em;line-height:1.24;margin:5px 0 0;color:#292719}
+.time-brand-accent{color:#d5a32a;letter-spacing:0}
+@media(max-width:720px){.time-brand-title{min-width:0;padding-left:9px;border-left-width:2px}.time-brand-english{font-size:.52rem;letter-spacing:.11em;white-space:normal}.topbar .time-brand-title h1{font-size:1.42rem;letter-spacing:.05em}}
 </style>
 </head>
 <body class="today-mode">
@@ -161,7 +168,7 @@ body.today-mode .all-day-task{font-size:.82rem;line-height:1.4}body.today-mode .
   </aside>
   <main>
     <header class="topbar">
-      <div><h1>時間管理</h1></div>
+      <div class="time-brand-title"><div class="time-brand-english">TIME MANAGEMENT <span class="time-brand-dot">·</span> DAILY PLANNER</div><h1>時間管理<span class="time-brand-accent">.</span></h1></div>
       <div class="actions"><span class="sync-state" id="syncState">連線中…</span><button class="btn" id="installWidget"><i class="fa-solid fa-mobile-screen"></i> 安裝 Widget</button><button class="btn" id="undo" disabled title="返回上一步"><i class="fa-solid fa-rotate-left"></i> 返回</button><button class="btn" id="addTask"><i class="fa-solid fa-list-check"></i> 新增任務</button><button class="btn" id="manageCategories"><i class="fa-solid fa-tags"></i> 新增分類</button><button class="btn primary" id="addEvent"><i class="fa-solid fa-plus"></i> 新增行程</button><button class="btn more-tools" id="moreTools"><i class="fa-solid fa-ellipsis"></i> 更多</button></div>
     </header>
     <div class="view" data-page="today"><section class="apple-sync-warning" id="appleSyncWarning" hidden><span id="appleSyncWarningText"></span><button type="button" class="btn" id="appleSyncOpen">檢查同步</button></section><section class="tron-alert" id="tronHomeNotice" hidden><strong id="tronHomeCount"></strong><button class="btn" id="tronHomeOpen">前往確認</button></section><section class="apple-home-alert" id="appleHomeAlert" hidden><div><strong id="appleHomeAlertTitle"></strong><span id="appleHomeAlertPreview"></span></div><div class="apple-home-actions"><button class="btn" type="button" id="appleHomeLater">稍後處理</button><button class="btn" type="button" id="appleHomeReview">前往確認</button></div></section><section class="card next-card" id="nextCard"><div class="next-icon"><i class="fa-solid fa-bolt"></i></div><div><span>接下來</span><strong id="nextTitle">正在整理今天的安排…</strong><small id="nextMeta"></small></div></section><section class="card panel mobile-event-checklist"><div class="panel-head"><h3><i class="fa-solid fa-list-check"></i> 行程待完成</h3><span class="count" id="mobileEventSubtaskCount"></span></div><div class="event-checklist" id="mobileEventSubtasks"></div><button class="event-checklist-more" type="button" id="mobileOpenEventSubtasks">查看所有行程子任務 <i class="fa-solid fa-arrow-right"></i></button></section><section class="card mobile-day-card" id="mobileDayCard"><div class="mobile-day-tools"><button class="date-arrow" type="button" id="mobilePrevDay" aria-label="前一天"><i class="fa-solid fa-chevron-left"></i></button><button class="mobile-date-copy" type="button" id="mobileDatePicker"><strong id="mobileTodayTitle">今天</strong></button><button class="date-arrow" type="button" id="mobileNextDay" aria-label="後一天"><i class="fa-solid fa-chevron-right"></i></button><button type="button" id="mobileOpenCalendar">行事曆</button></div><input type="date" id="mobileDateInput" hidden><div class="calendar-scroll" id="mobileDayView"></div></section><div class="workspace">
