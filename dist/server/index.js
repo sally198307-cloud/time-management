@@ -540,8 +540,44 @@ const widget=new ListWidget();widget.backgroundImage=c.getImage();widget.url=SIT
   return source.replaceAll("__SITE_URL__", origin).replaceAll("__API_URL__", origin + "/api/widget-state");
 }
 
+function quadrantWidgetRuntimeSource(_env, origin, quadrant) {
+  const source = String.raw`// 每日四象限任務 Widget（Scriptable）
+const SITE="__SITE__",API="__API__",COMPLETE="__COMPLETE__",Q="__Q__";
+function headers(){const i=Keychain.contains("tm_cf_access_id")?Keychain.get("tm_cf_access_id"):"",k=Keychain.contains("tm_cf_access_secret")?Keychain.get("tm_cf_access_secret"):"";return i&&k?{"CF-Access-Client-Id":i,"CF-Access-Client-Secret":k}:{}}
+function pad(n){return n<10?"0"+n:String(n)}
+function date(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+function minus(d,n){const x=new Date(d+"T12:00:00");x.setDate(x.getDate()-n);return date(x)}
+function done(t,d){return t.daily?(t.completedDates||[]).includes(d):!!t.done}
+function quadrant(t,d){if(t.daily)return "in";if(t.dueDate&&/^\\d{4}-\\d{2}-\\d{2}$/.test(t.dueDate)&&d>=minus(t.dueDate,2)&&!done(t,d))return "iu";return ["iu","in","nu","nn"].includes(t.quadrant)?t.quadrant:t.priority==="high"?"iu":t.priority==="medium"?"in":"nn"}
+function active(t,d){return !!t.date&&(t.daily?t.date<=d:t.date<=d&&d<=(t.dueDate&&t.dueDate>=t.date?t.dueDate:t.date))}
+const QUADS={iu:["重要且緊急","!","#bf5148","#fff0e8"],in:["重要但不緊急","✦","#318876","#ebf7f1"],nu:["緊急但較不重要","↗","#ac8035","#fff7e6"],nn:["不緊急也不重要","·","#758197","#f0f2f6"]};
+const [name,symbol,color,pale]=QUADS[Q],today=date(new Date());
+let updated=false;
+if(args.queryParameters?.action==="complete"&&args.queryParameters.taskId){
+  try{const req=new Request(COMPLETE);req.method="POST";req.headers={...headers(),"Content-Type":"application/json"};req.body=JSON.stringify({id:String(args.queryParameters.taskId),date:today});updated=!!(await req.loadJSON()).ok}catch(e){}
+}
+let state=null,failed=false;
+try{const req=new Request(API+"?r="+Date.now());req.headers=headers();req.timeoutInterval=20;state=(await req.loadJSON()).state;if(!Array.isArray(state.tasks))throw Error("empty")}catch(e){failed=true}
+const tasks=failed?[]:state.tasks.filter(t=>active(t,today)&&quadrant(t,today)===Q).sort((a,b)=>Number(done(a,today))-Number(done(b,today))||String(a.dueDate||"9999").localeCompare(String(b.dueDate||"9999"))||String(a.startTime||"").localeCompare(String(b.startTime||"")));
+const count=tasks.filter(t=>!done(t,today)).length,small=config.widgetFamily==="small",large=config.widgetFamily==="large",limit=small?3:large?10:5;
+const widget=new ListWidget();widget.backgroundColor=new Color("#ffffff");widget.setPadding(13,13,11,13);widget.url=SITE;
+function label(stack,v,size,clr,bold){const t=stack.addText(String(v));t.font=bold?Font.boldSystemFont(size):Font.systemFont(size);t.textColor=new Color(clr);t.lineLimit=1;t.minimumScaleFactor=.7;return t}
+const head=widget.addStack();head.centerAlignContent();const icon=head.addStack();icon.backgroundColor=new Color(pale);icon.size=new Size(25,25);icon.cornerRadius=7;icon.centerAlignContent();label(icon,symbol,17,color,true);head.addSpacer(7);label(head,name,small?11:15,"#2d2d2d",true);head.addSpacer();label(head,count,small?16:21,color,true);
+widget.addSpacer(9);const rule=widget.addStack();rule.size=new Size(0,1);rule.backgroundColor=new Color("#efede9");widget.addSpacer(8);
+if(failed){label(widget,"無法讀取任務",11,"#be5044",true);label(widget,"請檢查安全連線",9,"#999",false)}
+else if(!tasks.length){widget.addSpacer(13);label(widget,"今天沒有任務",11,"#999",false)}
+else tasks.slice(0,limit).forEach((t,i)=>{if(i)widget.addSpacer(small?7:10);const row=widget.addStack();row.centerAlignContent();if(!done(t,today)){const base=URLScheme.forRunningScript();row.url=base+(base.includes("?")?"&":"?")+"openEditor=false&action=complete&taskId="+encodeURIComponent(String(t.id))}label(row,done(t,today)?"✓":"○",small?13:16,done(t,today)?"#aaa":color,true);row.addSpacer(7);const col=row.addStack();col.layoutVertically();label(col,t.title||"未命名任務",small?10:12,done(t,today)?"#a0a0a0":"#303030",!done(t,today));if(!small)label(col,done(t,today)?"已完成":t.daily?"每日固定":t.dueDate?t.dueDate.slice(5).replace("-","/")+" 截止":"今日任務",9,"#999",false)});
+if(tasks.length>limit){widget.addSpacer(5);label(widget,"還有 "+(tasks.length-limit)+" 項",9,"#999",false)}
+widget.addSpacer();const footer=widget.addStack();label(footer,today.slice(5).replace("-","/"),9,"#aaa",false);footer.addSpacer();label(footer,count+" 待完成",9,"#aaa",false);
+widget.refreshAfterDate=new Date(Date.now()+(updated?60000:300000));Script.setWidget(widget);
+if(!config.runsInWidget){if(small)await widget.presentSmall();else if(large)await widget.presentLarge();else await widget.presentMedium()}Script.complete();
+`;
+  return source.replaceAll("__SITE__",origin).replaceAll("__API__",origin+"/api/widget-state").replaceAll("__COMPLETE__",origin+"/api/widget-task-complete").replaceAll("__Q__",quadrant);
+}
+function quadrantWidgetSource(env,origin,quadrant){return widgetLoaderSource(env,origin,"quadrant:"+quadrant)}
+
 function widgetLoaderSource(_env, origin, kind) {
-  const runtimePath = kind === "today" ? "/api/widget-today-runtime" : (kind === "course" ? "/api/widget-course-runtime" : "/api/widget-calendar-runtime");
+  const runtimePath = kind.startsWith("quadrant:") ? "/api/widget-quadrant-"+kind.split(":")[1]+"-runtime" : (kind === "today" ? "/api/widget-today-runtime" : (kind === "course" ? "/api/widget-course-runtime" : "/api/widget-calendar-runtime"));
   return String.raw`// 時間管理 Widget 自動更新載入器（Scriptable）
 // 只需要安裝這一次；之後每次執行都會載入網站上的最新版。
 const RUNTIME_URL = "__RUNTIME_URL__";
@@ -645,6 +681,12 @@ export default {
       return json({ ok: true, state });
     }
 
+    const quadrantMatch=url.pathname.match(/^\/api\/widget-quadrant-(iu|in|nu|nn)-(script|runtime)$/);
+    if(quadrantMatch){
+      if(request.method!=="GET")return json({error:"不支援的操作。"},405);
+      const [,quadrant,kind]=quadrantMatch;
+      return javascript(kind==="script"?quadrantWidgetSource(env,url.origin,quadrant):quadrantWidgetRuntimeSource(env,url.origin,quadrant),"Task-Quadrant-"+quadrant+".js");
+    }
     if (url.pathname === "/api/widget-script") {
       return javascript(widgetSource(env, url.origin), "Time-Management-Calendar-Widget.js");
     }
