@@ -187,6 +187,9 @@ const request = new Request(API_URL + "?refresh=" + Date.now());
 let payload = null, syncError = false;
 try { payload = await request.loadJSON(); } catch (error) { syncError = true; }
 const state = payload && payload.state ? payload.state : { events: [], tasks: [] };
+const pendingTron = (state.tronInbox || []).filter(function(item) {
+  return item && item.source === "auto" && item.term === state.tronLastAutoTerm && !item.resolved;
+}).length;
 const currentMinutes = now.getHours() * 60 + now.getMinutes();
 const events = (state.events || []).filter(function(event) {
   return event.date === today && (event.allDay || toMinutes(event.end) > currentMinutes);
@@ -285,7 +288,18 @@ function addTaskColumn(parent, tasks) {
 const widget = new ListWidget();
 widget.backgroundColor = PAPER;
 widget.url = SITE_URL;
-widget.setPadding(12, 12, 12, 12);
+widget.setPadding(10, 12, 10, 12);
+if (syncError || !payload || !payload.state) {
+  const notice = widget.addStack();
+  notice.centerAlignContent();
+  addText(notice, "⚠ 資料讀取失敗：請確認 Widget 登入權限", 8, MUTED, false);
+  widget.addSpacer(5);
+} else if (pendingTron > 0) {
+  const notice = widget.addStack();
+  notice.centerAlignContent();
+  addText(notice, "TronClass " + pendingTron + " 筆待確認（不會自動排入行程）", 8, MUTED, false);
+  widget.addSpacer(5);
+}
 const content = widget.addStack();
 content.layoutHorizontally();
 addEventColumn(content, events);
@@ -518,7 +532,7 @@ try {
   widget.backgroundColor = new Color("#ffffff");
   const title = widget.addText("Widget 更新失敗");
   title.font = Font.boldSystemFont(15);
-  const detail = widget.addText("請確認網路後再試一次");
+  const detail = widget.addText("請檢查網路與 Cloudflare Access 登入；不代表行程已清空");
   detail.font = Font.systemFont(11);
   detail.textColor = new Color("#888888");
   Script.setWidget(widget);
