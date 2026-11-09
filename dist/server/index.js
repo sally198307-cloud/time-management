@@ -576,8 +576,80 @@ if(!config.runsInWidget){if(small)await widget.presentSmall();else if(large)awai
 }
 function quadrantWidgetSource(env,origin,quadrant,transparent=false){return widgetLoaderSource(env,origin,"quadrant:"+quadrant+(transparent?":transparent":""))}
 
+function quickAddWidgetRuntimeSource(_env, origin) {
+  const source = String.raw`// 快速新增任務／行程 Widget（Scriptable）
+const API="__API__",SITE="__SITE__";
+function credentials(){
+  const id=Keychain.contains("tm_cf_access_id")?Keychain.get("tm_cf_access_id"):"";
+  const secret=Keychain.contains("tm_cf_access_secret")?Keychain.get("tm_cf_access_secret"):"";
+  return id&&secret?{"CF-Access-Client-Id":id,"CF-Access-Client-Secret":secret}:{};
+}
+function two(v){return v<10?"0"+v:String(v)}
+function ymd(d){return d.getFullYear()+"-"+two(d.getMonth()+1)+"-"+two(d.getDate())}
+function validDate(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+"T12:00:00");return !Number.isNaN(d.getTime())&&ymd(d)===value}
+function validTime(value){return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)}
+const today=ymd(new Date());
+const choice=args.queryParameters&&args.queryParameters.quickAdd;
+async function askField(title,message,fields){
+  const alert=new Alert();alert.title=title;alert.message=message;
+  fields.forEach(f=>alert.addTextField(f[0],f[1]||""));
+  alert.addAction("下一步");alert.addCancelAction("取消");
+  if(await alert.present()!==0)return null;
+  return fields.map((_,i)=>alert.textFieldValue(i).trim());
+}
+async function notice(title,message){const alert=new Alert();alert.title=title;alert.message=message;alert.addAction("確定");await alert.present()}
+async function addEntry(kind){
+  const isTask=kind==="task";
+  const basic=await askField(isTask?"新增任務":"新增行程","輸入名稱和日期，儲存後同步到時間管理網站。",[["名稱",""],["日期（YYYY-MM-DD）",today],["備註（可留空）",""]]);
+  if(!basic)return;
+  const [title,date,notes]=basic;
+  if(!title||!validDate(date)){await notice("資料不完整","請填名稱，以及正確日期（例如 "+today+"）。");return}
+  let payload={kind,title:title.slice(0,60),date,notes:notes.slice(0,500)};
+  if(isTask){
+    const extra=await askField("任務設定","截止日期可留空；空白代表只有當天。",[["截止日期（選填）",date],["四象限 1～4","2"]]);
+    if(!extra)return;
+    const [dueDate,number]=extra;
+    if(dueDate&&!validDate(dueDate)){await notice("日期錯誤","截止日期請填 YYYY-MM-DD");return}
+    if(dueDate&&dueDate<date){await notice("日期錯誤","截止日期不能早於開始日期");return}
+    const quadrants={1:"iu",2:"in",3:"nu",4:"nn"};
+    if(!quadrants[number]){await notice("分類錯誤","請填 1、2、3 或 4");return}
+    payload={...payload,dueDate,quadrant:quadrants[number]};
+  }else{
+    const extra=await askField("行程時間","請使用 24 小時制，例如 09:00。",[["開始時間","09:00"],["結束時間","10:00"]]);
+    if(!extra)return;
+    const [start,end]=extra;
+    if(!validTime(start)||!validTime(end)||end<=start){await notice("時間錯誤","請輸入有效的開始／結束時間，結束時間須晚於開始時間。");return}
+    payload={...payload,start,end};
+  }
+  try{
+    const req=new Request(API);req.method="POST";req.headers={...credentials(),"Content-Type":"application/json"};req.body=JSON.stringify(payload);req.timeoutInterval=20;
+    const response=await req.loadJSON();
+    if(!response||!response.ok)throw new Error(response&&response.error||"儲存失敗");
+    await notice("新增成功","已同步至時間管理網站。");
+  }catch(error){await notice("新增失敗",String(error)+"\n請檢查網路及 Cloudflare Access 連線。")}
+}
+if(!config.runsInWidget&&(choice==="task"||choice==="event"))await addEntry(choice);
+const widget=new ListWidget();widget.backgroundColor=new Color("#ffffff");widget.setPadding(14,14,12,14);widget.url=SITE;
+function text(stack,value,size,color,bold){const item=stack.addText(value);item.font=bold?Font.boldSystemFont(size):Font.systemFont(size);item.textColor=new Color(color);item.lineLimit=1;item.minimumScaleFactor=.75;return item}
+const small=config.widgetFamily==="small";
+text(widget,"QUICK ADD",9,"#ba953d",true);
+widget.addSpacer(5);text(widget,"快速新增",small?16:19,"#2b2923",true);widget.addSpacer(small?11:16);
+function linkButton(title,symbol,kind,color){
+  const row=widget.addStack();row.layoutHorizontally();row.centerAlignContent();row.setPadding(small?8:11,12,small?8:11,12);row.backgroundColor=new Color(color);row.cornerRadius=12;
+  const url=URLScheme.forRunningScript();row.url=url+(url.includes("?")?"&":"?")+"openEditor=false&quickAdd="+kind;
+  text(row,symbol,small?15:18,"#614b24",true);row.addSpacer(9);text(row,title,small?13:15,"#352b20",true);row.addSpacer();text(row,"＋",small?14:18,"#725c3b",true);
+}
+linkButton("新增任務","☑","task","#fff2cf");widget.addSpacer(9);linkButton("新增行程","▦","event","#e9f6ef");
+widget.addSpacer();if(!small)text(widget,"點選後輸入，完成即同步",9,"#9a9489",false);
+widget.refreshAfterDate=new Date(Date.now()+10*60*1000);
+Script.setWidget(widget);if(!config.runsInWidget){if(small)await widget.presentSmall();else if(config.widgetFamily==="large")await widget.presentLarge();else await widget.presentMedium()}
+Script.complete();
+`;
+  return source.replaceAll("__API__",origin+"/api/widget-quick-add").replaceAll("__SITE__",origin);
+}
+
 function widgetLoaderSource(_env, origin, kind) {
-  const runtimePath = kind.startsWith("quadrant:") ? "/api/widget-quadrant-"+kind.split(":")[1]+(kind.endsWith(":transparent")?"-transparent":"")+"-runtime" : (kind === "today" ? "/api/widget-today-runtime" : (kind === "course" ? "/api/widget-course-runtime" : "/api/widget-calendar-runtime"));
+  const runtimePath = kind === "quick-add" ? "/api/widget-quick-add-runtime" : kind.startsWith("quadrant:") ? "/api/widget-quadrant-"+kind.split(":")[1]+(kind.endsWith(":transparent")?"-transparent":"")+"-runtime" : (kind === "today" ? "/api/widget-today-runtime" : (kind === "course" ? "/api/widget-course-runtime" : "/api/widget-calendar-runtime"));
   return String.raw`// 時間管理 Widget 自動更新載入器（Scriptable）
 // 只需要安裝這一次；之後每次執行都會載入網站上的最新版。
 const RUNTIME_URL = "__RUNTIME_URL__";
@@ -638,6 +710,50 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api/apple-calendar') return handleAppleCalendar(request, env);
     if (url.pathname === '/api/ai/study-plan') return handleStudyPlan(request, env);
+    if(url.pathname==="/api/widget-quick-add-script"){
+      if(request.method!=="GET")return json({error:"不支援的操作。"},405);
+      return javascript(widgetLoaderSource(env,url.origin,"quick-add"),"Time-Management-Quick-Add.js");
+    }
+    if(url.pathname==="/api/widget-quick-add-runtime"){
+      if(request.method!=="GET")return json({error:"不支援的操作。"},405);
+      return javascript(quickAddWidgetRuntimeSource(env,url.origin),"Time-Management-Quick-Add-Runtime.js");
+    }
+    if(url.pathname==="/api/widget-quick-add"){
+      if(request.method!=="POST")return json({error:"不支援的操作。"},405);
+      let body;
+      try{body=await request.json()}catch{return json({error:"資料格式錯誤"},400)}
+      const kind=body?.kind;
+      if(kind!=="task"&&kind!=="event")return json({error:"只能新增任務或行程"},400);
+      const title=cleanText(body.title,60),notes=cleanText(body.notes,500),date=body.date;
+      const dateValid=(value)=>typeof value==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+"T12:00:00"))&&new Date(value+"T12:00:00").toISOString().slice(0,10)===value;
+      const timeValid=(value)=>typeof value==="string"&&/^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+      if(!title||!dateValid(date))return json({error:"名稱或日期無效"},400);
+      if(kind==="task"&&body.dueDate&&(!dateValid(body.dueDate)||body.dueDate<date))return json({error:"截止日期無效"},400);
+      if(kind==="task"&&body.quadrant&&!["iu","in","nu","nn"].includes(body.quadrant))return json({error:"四象限設定無效"},400);
+      if(kind==="event"&&(!timeValid(body.start)||!timeValid(body.end)||body.end<=body.start))return json({error:"行程時間無效"},400);
+      const uid=env.WIDGET_OWNER_USER_ID||userId(request,env);
+      const row=await env.DB.prepare("SELECT state_json FROM user_state WHERE user_id=?").bind(uid).first();
+      if(!row?.state_json)return json({error:"網站資料尚未初始化，請先開啟時間管理網站"},404);
+      const state=JSON.parse(row.state_json);
+      state.tasks=Array.isArray(state.tasks)?state.tasks:[];
+      state.events=Array.isArray(state.events)?state.events:[];
+      const id=crypto.randomUUID();
+      const category=state.categories?.[0]?.name||"一般";
+      if(kind==="task"){
+        const dueDate=body.dueDate||"",quadrant=body.quadrant||"in";
+        const daysUntil=dueDate?Math.round((Date.parse(dueDate+"T12:00:00")-Date.now())/86400000):null;
+        const finalQuadrant=daysUntil!==null&&daysUntil<=2?"iu":quadrant;
+        state.tasks.push({id,title,notes,date,category,owner:"me",startTime:"00:00",dueDate,dueTime:dueDate?"23:59":"",allDay:false,daily:false,quadrant:finalQuadrant,priority:finalQuadrant==="iu"?"high":finalQuadrant==="in"?"medium":"normal",reminderMinutes:"none",reminderSentFor:"",reminders:[],done:false,completedDates:[],subtasks:[]});
+      }else{
+        state.events.push({id,title,notes,date,category,owner:"me",start:body.start,end:body.end,allDay:false,isCourse:false,isExam:false,subtasks:[]});
+      }
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO state_versions (user_id,state_json,created_at) VALUES (?,?,CURRENT_TIMESTAMP)").bind(uid,row.state_json),
+        env.DB.prepare("INSERT INTO user_state (user_id,state_json,updated_at) VALUES (?,?,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET state_json=excluded.state_json,updated_at=CURRENT_TIMESTAMP").bind(uid,JSON.stringify(state)),
+      ]);
+      return json({ok:true,id,kind});
+    }
+
     if (url.pathname === "/api/widget-state") {
       if (request.method !== "GET") return json({ error: "不支援的操作。" }, 405);
       const row = await env.DB.prepare(
