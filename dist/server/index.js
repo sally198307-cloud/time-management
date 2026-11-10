@@ -710,6 +710,16 @@ function quickAddPage(){return "<!doctype html>\n<html lang=\"zh-Hant\"><head><m
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if(url.pathname==="/quick-add-icon.png"){
+      const chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+      const encoded="iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAADMElEQVR42u3dvXHbQBCAUROjWpgqcMpQmdpwoJIYuA03oGGqgKkKUexMo6EBeka4O+wu3pfbAMinvQOon8PH69MPaa7JSyA4BIfgEByCQ3AIDsEhOASHBIfgEByCQ3AIDsEhOASH4JDgEByCQ3AIDsEhOASH4BAcEhyCQ3AIDo3oIcVZnl7ei73ul/Mx/kkeIv/CuHomcimZyHCZmSbHTljEHyETGS48x+RYeoHertdiFH4+PsafH9HvVuqx+HpdS0QsK/8fG1Vl3LnAUIvLRAYfyW5ldyIj+MV6fK7YOG4G6a7GxuwlB1lZTA7BITgEh+AQHIJDcAgOwSE4JDgEh+AQHIJDcAgOwSE4BIcEh+AQHOrRQ/YLuPz5HfbcTs+/TA5ZVgSHBIeqb0izb/pMDsEhOASH4JDgEByCQ3AIDkXM93N8sz08tjc5BIfgEByyIbUxNDkEh+AQHLIhVd+W/rTs51/y2vDPEMMRCMR9JeOhwBGXxRKUYUTgSGBiqxXHhjSZjKUVx+TAYuhCY3IkltF7hMCRXkY/H3BUkNHJBxxFZPTwAUcdGc19wFFKRlsfcFST0dCH5xxRZHx9VtHkrT29vK98/mFyhOjmXdzwk1g4Yo2NWQpNfKycQHBElBHEBxyCQ3Ds+fa1+coCh+DY69hYMzzgEByCQ3DYcIzYdvjgrXtrHnTe/7e9v/vc5IgrY9v/HI7EMgYcAo7EMnofCA7BITgER4J632cOOFAIHDdbqoyPmLby0fUQJkfiN683vsPH61PMF/Hteo38rrcab8OegX7jjjfK5Pj31MssLjakfMCxxfRGZKtifSp7OR9nV1k+xm84Ik6OID8JqKDLyuV8RCTC19tU75JUc8+x5GPYo2ilwZFiigSHu+al8/h8Y7h3bK1n55e3pG8WQYSBBEeIVe+GQhMZ688qygdvVQdA6l2ayVFw19zqTOCo5qPhOcBRykfbo8NRx0fz48JRxEePI8JRwUenY7mVzX2L62dljZBthpPJkW+KDFuw4MhEZPA+F47oUDZ8cAKHbEgFh+AQHIJDcAgOwSE4BIcEh+AQHIJDcAgOwSE4BIfgkD77C/y+AFOrrajGAAAAAElFTkSuQmCC";
+      let acc=0,bits=0;const bytes=[];
+      for(const c of encoded){if(c==="=")break;const v=chars.indexOf(c);if(v<0)continue;acc=(acc<<6)|v;bits+=6;if(bits>=8){bits-=8;bytes.push((acc>>>bits)&255);}}
+      return new Response(new Uint8Array(bytes),{headers:{"content-type":"image/png","cache-control":"public, max-age=3600"}});
+    }
+    if(url.pathname==="/quick-add.webmanifest"){
+      return json({name:"快速新增",short_name:"快速新增",start_url:"/quick-add.html",scope:"/",display:"standalone",background_color:"#fff9ed",theme_color:"#f6c244",icons:[{src:"/quick-add-icon.png",sizes:"180x180",type:"image/png",purpose:"any maskable"}]});
+    }
     if(url.pathname==="/quick-add"||url.pathname==="/quick-add/"){if(request.method!=="GET")return json({error:"不支援的操作。"},405);return new Response(quickAddPage(),{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});}
     if (url.pathname === '/api/apple-calendar') return handleAppleCalendar(request, env);
     if (url.pathname === '/api/ai/study-plan') return handleStudyPlan(request, env);
