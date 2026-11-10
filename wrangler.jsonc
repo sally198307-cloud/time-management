@@ -10,7 +10,9 @@
     "run_worker_first": [
       "/api/*",
       "/quick-add",
-      "/quick-add/*"
+      "/quick-add/*",
+      "/quick-add-icon.png",
+      "/quick-add.webmanifest"
     ]
   },
   "d1_databases": [
