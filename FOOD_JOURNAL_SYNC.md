@@ -1,24 +1,33 @@
-# 飲食紀錄雲端版：Cloudflare Workers + D1
+# 飲食紀錄免 Email 登入版本
 
-部署網址：`https://time-management.5f6g5w9r9m.workers.dev/food-journal/`
+預定網址：https://time-management.5f6g5w9r9m.workers.dev/food-journal/
 
-這個頁面使用原有時間管理專案的 Cloudflare Workers、D1 binding `DB` 和 Cloudflare Access 全站保護。**飲食紀錄使用獨立的 D1 user_state keys**：`food-journal-v2:<SHA256(已登入 Access 電子郵件)>:<記錄類型>:<記錄 ID>`，不會覆蓋時間管理的 `shared-calendar` 紀錄。由於重用既有 `user_state` 資料表，因此不需要新增 D1 Migration。
+- 前台網站不需要 Email 登入。
+- 雲端儲存在既有 Cloudflare D1，跟時間管理的課表、行程資料隔離。
+- 雲端讀寫要求 64 字元的強隨機同步密鑰。密鑰由瀏覽器自動產生，不是使用者 Email 或密碼。
+- 點「複製專屬同步連結」即可在 Safari 和 iPhone 主畫面版共用一份資料。**任何拿到這個專屬連結的人都能讀寫你的資料，請勿公開分享。**
+- 網站本身公開，但每份私人資料不公開；兩者不可混為一談。
 
-## 先保護及搬移 Safari 舊資料（只需一次）
+## Cloudflare Access 設定（還需要在 Dashboard 完成）
 
-1. 在**原本仍看得到舊紀錄的 Safari** 中打開 `https://sally198307-cloud.github.io/diet-tracker/food-journal/`，進入「週報 → 下載 JSON 備份」並存入 iPhone「檔案」。
-2. 在 Safari 開啟新的 Cloudflare 網址，完成 Cloudflare Access 既有的 Email OTP 驗證。
-3. 進入「週報 → 匯入備份」，挑選剛剛下載的 JSON。
-4. 按「合併並啟用同步」，等待顯示「同步成功」，確認照片與舊紀錄都出現。
-5. 再用 Safari 分享功能將**新的 Cloudflare 網址**加入主畫面。從主畫面開啟，同樣完成 Access 驗證，進入「週報 → 合併並啟用同步」。
-6. 驗證兩端能看到同樣的測試紀錄後，再停止使用舊 GitHub Pages 版本。**不要先刪舊主畫面圖示或清除 Safari 網站資料。**
+原時間管理網站有 Cloudflare Access 既有驗證；光改 GitHub Worker 程式，不能繞過 Access 門檻。請至 Cloudflare Zero Trust > Access > Applications，在目前保護 time-management Worker 的規則中設立**更明確、只限以下兩個路徑的公開／Bypass 規則**：
 
-## 重要事項
+- `/food-journal/*`（連同 `/food-journal/`）
+- `/api/food-journal`
 
-- GitHub 存的是前端／Worker 程式碼，**不是**私人飲食資料。雲端資料寫在 Cloudflare D1，並依 Cloudflare Access 登入 Email 分隔。
-- 目前沿用原時間管理 Cloudflare Access 的「All traffic」保護。務必維持這個政策！如果關閉 Access，請先停用飲食 API，避免授權標頭被偽造。
-- 不要把 GitHub Pages 舊網址當成同步版。**只有新的 Cloudflare 同源網址會自動讀寫 D1**。
-- 每筆餐點的照片以 Base64 跟紀錄一起儲存在 D1，單筆大小限制約 1.4 MB。超過限制會保留在本機並顯示同步錯誤，需要壓縮／減少單筆照片後再試。仍需定期下載 JSON。
-- 編輯同步採每筆 ID 與版本時間戳合併；跨裝置同時修改同一筆紀錄有衝突風險。請先等待同步成功再換裝置編輯。
-- D1 紀錄與時間管理行事曆使用相同 Cloudflare 帳號的 D1 套件，但有不同的 user_state key namespace。
-- 如果新網頁或 API 沒有出現，請在 Cloudflare Dashboard 核實 time-management Worker 已從這次 GitHub 推送完成部署。**僅 GitHub commit 成功不能證明 Cloudflare 已部署。**
+**不要**把整個 time-management Worker 設為公開，否則原有的 `/api/state`、任務、備忘和行事曆等私人資料會暴露。實際操作依 Cloudflare Access 的保護類型（hostname/path、Worker 級別或帳號級別）調整，較具體路徑規則優先；必要時使用該 Worker 的 path-based public overrides。確認舊的時間管理登入仍然正常。
+
+## 首次搬移（必須先備份）
+
+1. 用原本有資料的 Safari 開啟 GitHub Pages 舊網站 `https://sally198307-cloud.github.io/diet-tracker/food-journal/`。
+2. 週報 → 下載 JSON 備份，存入「檔案」。
+3. 進入新的 Cloudflare 飲食紀錄網址，週報 → 匯入備份。
+4. 週報 → 「建立同步空間並啟用」，等待顯示成功。
+5. 點「複製專屬同步連結」並妥善保存。用 Safari 開啟這條連結再加入主畫面。若主畫面版沒有載入資料，可在「已有另一個裝置的同步碼」貼上同一連結或同步碼。
+6. 再按「立即同步」，確認資料正確。不要清除舊 Safari 資料。
+
+## 限制
+
+同步時會用同一筆記錄 ID 和版本時間戳合併。不要在兩台裝置同時編輯同一筆餐點。照片用 base64 儲存在 D1，單筆資料可能超過大小限制；遇到失敗應保留 JSON 備份並減少照片大小。密鑰遺失又未保存在任何裝置時，雲端資料可能無法取回。
+
+GitHub 改動成功 **不等於** Cloudflare Worker 正式部署成功或 Access path bypass 設定已完成。請在 Cloudflare dashboard 核實最新版本已部署並使用 Safari 與主畫面版實際測試。
