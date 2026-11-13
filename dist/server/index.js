@@ -1,4 +1,5 @@
 import { handleAppleCalendar } from './apple-calendar.js';
+import { handleFoodJournal } from './food-journal.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -710,6 +711,7 @@ function quickAddPage(){return "<!doctype html>\n<html lang=\"zh-Hant\"><head><m
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if(url.pathname === '/api/food-journal') return handleFoodJournal(request,env);
     if(url.pathname==="/quick-add-icon.png"){
       const chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
       const encoded="iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAD60lEQVR42u3da24TSxSFUVfJkwkzwPNXmAEejvkVKUIxdDv9OLVrfQMgvsny9jEYbruc2OP97XFRXO12b6d9bYCVBLxBrCTcDWQlwW4gKwl2A1lJsDvMqtBWhhrISlrrDrOS1rrDrCTUHWYloe4wKwl1h1lJqDvMSkLdYVYS6g6zklB33yIl1a2zkla6w6wk1E4OZZ8c1lkjr7SFVu5CW2eNvtIWWpkLbZ2VsNIWWrk3tBQB2rmhlLPDQiuqq29B8X7+3ubX+fXDDa0QzBPV3M/W2ULLOgOtUzBPtM5AW2agNVCTrTPQ1hloDYJ5wnUGWkDLqQG0jsU86bkBtGUGWsWbeJ2Bts5AqzDmydcZaMsMtNzOQMs6Aw2zdQZaQMupAbSqYHZuAG2ZgVbFrDPQ1hloVcRsnYEW0LLOQMMsoGEW0BPm3ADaOgOtipitM9CWGWi5nYG2zgIaZusMtAS0dQZa7magYRbQcm4AbZ0F9ECYrTPQEtDWGWiYBTTM1vmArr4FnkxJTzAL7dSIerUAGuao0wdomKPueKAV9aYUaOscFdAwx6wz0IrCDLR1jsI8N2iY4zDPCxrmSMxODpiBts4wV+7qhznZkyn803xODq8MQMurE9CCGWjnBsxAa1LMQMMMtAY5Nyb9y7ZAW2agBTPQzg0BLesMNMxAa+hzA2agLTPQqrbOMANtmYEWzEA7N2AGWgLaqSGgxzs3YAbaMgMtmIHWTucGzEBbZqAFc0z+P4XVzo09MX/1OP1zuhpymZ896cL+Vg3QXkGiUANd5dzYa52XPr4Q1EAnnxprkQagBjr5bp4woM88N2AG2jILaJiB1k7nBsxAW2YBLaC147lhnYF2amhtPm03IuY9/0Rv6a9d9EkK9J6Ytv6hV/qj6Y/HUgy2k2OUZa76OYtijwtomKMeH9Bb/+C8AQTaMg+8zsUeJ9BpsCy0yq6zgIYZaH3n3Ngb8yhPliKPE2jLbKF1MObqT5xCjw/oV86NM36AVVEXe1w+yzHSD/Dja1f4LUQfToL58Mcx4ee2nRxbgxDQ1lmbgW63e/NtgDmhdrs3C/2/cwNmJ4dlFtAwayvQ7mgl3M8WWk4OaQjQzg7vA0Z93/DZroWGOupNcH8mXROhHhjz32Yt9Oyow3578stFfry/PQjQaOtsoRVXXypfqr7O/1xoqDUaZieH5jg5rLRGXOdFCw21RsG8+OSAWiNgXnVDQ63qmFe/KYRalTGvBg21KmN+CTTUqor5ZdBQqyLmy+XJh5PW5sNMOhvytxfaWqsa5s0W2lqryhjutqxg64xX9d1PBbB15Hl66O0LN8S7f60z/0MBB3jr/gAdEX0c1dCAdAAAAABJRU5ErkJggg==";
