@@ -17,9 +17,13 @@ export async function handleFoodJournal(request,env){
   if(!env.DB)return output({error:"D1 未設定"},503);
   // This endpoint must be behind the existing Cloudflare Access 'All traffic' policy.
   // The identity header is set by Access after a successful authentication.
-  if(!request.headers.get("Cf-Access-Authenticated-User-Email")&&!request.headers.get("Cf-Access-Jwt-Assertion"))return output({error:"請先通過 Cloudflare Access 驗證"},401);
+  const email=request.headers.get("Cf-Access-Authenticated-User-Email");
+  if(!email||!request.headers.get("Cf-Access-Jwt-Assertion"))return output({error:"請先通過 Cloudflare Access 電子郵件驗證"},401);
+  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(email.trim().toLowerCase()));
+  const owner=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
+  const prefix=PREFIX+owner+":";
   if(request.method==="GET"){
-    const rows=await env.DB.prepare("SELECT user_id,state_json FROM user_state WHERE user_id LIKE ? ORDER BY user_id LIMIT 10000").bind(PREFIX+"%").all();
+    const rows=await env.DB.prepare("SELECT user_id,state_json FROM user_state WHERE user_id LIKE ? ORDER BY user_id LIMIT 10000").bind(prefix+"%").all();
     const items=[];
     for(const row of rows.results||[]){
       try{const x=JSON.parse(row.state_json);if(parseRecord(x))items.push(x)}catch{}
@@ -41,7 +45,7 @@ export async function handleFoodJournal(request,env){
     if(!rec)return output({error:"資料格式不正確"},400);
     const text=JSON.stringify(rec);
     if(text.length>1400000)return output({error:"單筆資料或照片太大，請先下載 JSON 備份"},413);
-    prepared.push({key:PREFIX+rec.type+":"+rec.id,text,t:rec.t});
+    prepared.push({key:prefix+rec.type+":"+rec.id,text,t:rec.t});
   }
   const results=await env.DB.batch(prepared.map(r=>env.DB.prepare(
     "INSERT INTO user_state(user_id,state_json,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) "+
