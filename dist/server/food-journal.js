@@ -17,8 +17,17 @@ export async function handleFoodJournal(request,env){
   if(!env.DB)return output({error:"D1 未設定"},503);
   // This endpoint must be behind the existing Cloudflare Access 'All traffic' policy.
   // The identity header is set by Access after a successful authentication.
-  const email=request.headers.get("Cf-Access-Authenticated-User-Email");
-  if(!email||!request.headers.get("Cf-Access-Jwt-Assertion"))return output({error:"請先通過 Cloudflare Access 電子郵件驗證"},401);
+  // Cloudflare Access protects the Worker at the edge. Its assertion carries
+  // the authenticated email even when the injected email header is absent.
+  const assertion=request.headers.get("Cf-Access-Jwt-Assertion");
+  let email=request.headers.get("Cf-Access-Authenticated-User-Email");
+  if(!email&&assertion){
+    try{
+      const payload=assertion.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");
+      email=JSON.parse(atob(payload)).email||null;
+    }catch{}
+  }
+  if(!email||!assertion)return output({error:"請先通過 Cloudflare Access 電子郵件驗證"},401);
   const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(email.trim().toLowerCase()));
   const owner=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
   const prefix=PREFIX+owner+":";
