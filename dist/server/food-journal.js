@@ -23,7 +23,7 @@ export async function handleFoodJournal(request,env){
   const owner=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
   const prefix=PREFIX+owner+":";
   if(request.method==="GET"){
-    const rows=await env.DB.prepare("SELECT user_id,state_json FROM user_state WHERE user_id LIKE ? ORDER BY user_id LIMIT 10000").bind(prefix+"%").all();
+    const rows=await env.DB.prepare("SELECT user_id,state_json FROM user_state WHERE substr(user_id,1,?) = ? ORDER BY user_id LIMIT 10000").bind(prefix.length,prefix).all();
     const items=[];
     for(const row of rows.results||[]){
       try{const x=JSON.parse(row.state_json);if(parseRecord(x))items.push(x)}catch{}
