@@ -15,20 +15,11 @@ function parseRecord(x){
 }
 export async function handleFoodJournal(request,env){
   if(!env.DB)return output({error:"D1 未設定"},503);
-  // This endpoint must be behind the existing Cloudflare Access 'All traffic' policy.
-  // The identity header is set by Access after a successful authentication.
-  // Cloudflare Access protects the Worker at the edge. Its assertion carries
-  // the authenticated email even when the injected email header is absent.
-  const assertion=request.headers.get("Cf-Access-Jwt-Assertion");
-  let email=request.headers.get("Cf-Access-Authenticated-User-Email");
-  if(!email&&assertion){
-    try{
-      const payload=assertion.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");
-      email=JSON.parse(atob(payload)).email||null;
-    }catch{}
-  }
-  if(!email||!assertion)return output({error:"請先通過 Cloudflare Access 電子郵件驗證"},401);
-  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(email.trim().toLowerCase()));
+  // Public endpoint. Knowledge of a strong random sync key is required for
+  // record access. Never accept an arbitrary public user ID without a secret.
+  const secret=request.headers.get("X-Food-Journal-Key")||"";
+  if(!/^[a-f0-9]{64}$/.test(secret))return output({error:"缺少有效的同步密鑰"},401);
+  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("food-journal:"+secret));
   const owner=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
   const prefix=PREFIX+owner+":";
   if(request.method==="GET"){
