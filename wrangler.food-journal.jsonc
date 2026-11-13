@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "food-journal",
+  "main": "dist/server/food-journal-standalone.js",
+  "compatibility_date": "2026-11-12",
+  "assets": {
+    "directory": "./dist/client/food-journal",
+    "binding": "ASSETS",
+    "base_path": "/food-journal",
+    "run_worker_first": [
+      "/api/*",
+      "/food-journal",
+      "/"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "time-management-db",
+      "database_id": "df904d9e-c08f-4fa0-bfb0-987d72437e81"
+    }
+  ]
+}
