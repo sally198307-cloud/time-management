@@ -135,11 +135,12 @@ function makeCloud(bridge){
    const key=raw.match(/(?:^|#sync=)([a-f0-9]{64})$/)?.[1]||"";
    if(!key){alert("請貼上有效的同步碼或專屬連結");return true}
    if(secret&&secret!==key&&!confirm("切換同步碼將連到另一份雲端紀錄。建議先下載本機 JSON 備份。確定切換？"))return true;
-   bridge.backup();secret=key;localStorage.setItem(secretKeyName,secret);if(!secret){secret=makeSecret();localStorage.setItem(secretKeyName,secret)}
+   bridge.backup();secret=key;localStorage.setItem(secretKeyName,secret);
    enabled=true;localStorage.setItem(enabledKey,"yes");refresh();await sync();return true;
   }
   if(id==="syncEnable"){
    if(!confirm("請先確認已下載目前裝置的 JSON 備份。啟用後會合併本機與雲端的餐點、照片和每日回報，確定繼續？"))return true;
+   if(!secret){secret=makeSecret();localStorage.setItem(secretKeyName,secret)}
    enabled=true;localStorage.setItem(enabledKey,"yes");refresh();await sync();return true;
   }
   if(id==="syncNow"){await sync();return true}
