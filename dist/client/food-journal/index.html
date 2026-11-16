@@ -230,17 +230,18 @@ function weekPreview(d){const ms=dailyMeals(d),s=sums(d);return `<div class="wee
 function reportPairs(d){
  const s=sums(d);
  const selected=k=>{const v=reportValue(d,k);return v===null||v===undefined||v===''?'未填':String(v)};
+ const rated=k=>{const v=selected(k);return v==='未填'?v:(/^\d+(?:\.\d+)?$/.test(v)?v+'/10':v)};
  return [
  ['飲食',`目標3/3/4；總量${s.map(num).join('/')}`],
  ['水',dailyWater(d)+' ml'],
  ['是否邪惡食物',dailyMeals(d).some(x=>x.kind==='quota')?'是':selected('evil')],
  ['是否聚餐',dailyMeals(d).some(x=>x.kind==='gather')?'是':selected('gather')],
- ['前一天睡眠',selected('sleep')],
- ['壓力',selected('stress')],
- ['疲勞',selected('fatigue')],
- ['便便',selected('stool')],
- ['水腫',selected('swelling')],
- ['飽足感',selected('satiety')]
+ ['前一天睡眠',rated('sleep')],
+ ['壓力',rated('stress')],
+ ['疲勞',rated('fatigue')],
+ ['便便',rated('stool')],
+ ['水腫',rated('swelling')],
+ ['飽足感',rated('satiety')]
  ];
 }
 function render(){tabRender();root.innerHTML=({today:todayPage,history:historyPage,calendar:calendarPage,report:reportPage,weekly:weekPage}[page])()}
