@@ -30,40 +30,61 @@ window.FoodJournalPDF = (function(){
  })}
  function canvasJPEG(c){return new Promise((resolve,reject)=>c.toBlob(async b=>{try{if(!b)throw Error('無法建立 PDF 頁面');resolve(new Uint8Array(await b.arrayBuffer()))}catch(e){reject(e)}},'image/jpeg',0.86))}
  async function build(days){
-  const pages=[];let c,ctx,y,current;
-  function font(size,bold=false){ctx.font=(bold?'700 ':'400 ')+size+'px -apple-system, "PingFang TC", "Noto Sans TC", sans-serif'}
-  function text(t,x,yy,size=29,bold=false,color='#344e3a'){font(size,bold);ctx.fillStyle=color;ctx.textBaseline='top';ctx.fillText(String(t),x,yy)}
+  const pages=[];let c,ctx,y,current,pageNum=0;
+  const ink='#344e3a',muted='#748378',line='#dce4d9',cream='#faf9f5',sage='#e9efe5',body=W-2*M;
+  function font(size,bold=false){ctx.font=(bold?'700 ':'400 ')+size+'px "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif'}
+  function text(t,x,yy,size=29,bold=false,color=ink){font(size,bold);ctx.fillStyle=color;ctx.textBaseline='top';ctx.fillText(String(t),x,yy)}
   function lines(t,width,size=29,bold=false){font(size,bold);const result=[];for(const part of String(t).split('\n')){let row='';for(const ch of Array.from(part)){if(row&&ctx.measureText(row+ch).width>width){result.push(row);row=ch}else row+=ch}result.push(row)}return result}
-  async function finish(){if(!c)return;ctx.fillStyle='#dce6db';ctx.fillRect(M,H-72,W-2*M,2);text('飲食紀錄 · '+current.date,M,H-58,21,false,'#7b8d7e');pages.push(await canvasJPEG(c));c.width=1;c.height=1;c=null}
-  function begin(day,continued=false){current=day;c=document.createElement('canvas');c.width=W;c.height=H;ctx=c.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);
-   text('飲食紀錄',M,65,43,true);text('FOOD JOURNAL',M,120,21,false,'#849487');
-   text(day.label+(continued?'（續）':''),M,162,32,true);ctx.fillStyle='#dce6db';ctx.fillRect(M,214,W-2*M,2);y=243;
-   if(!continued){ctx.fillStyle='#f1f5ef';ctx.fillRect(M,y,W-2*M,126);
-    ['目標份量','實際份量','喝水量'].forEach((name,i)=>{let x=M+22+i*((W-2*M)/3);text(name,x,y+13,23,false,'#738575');text(['3 / 3 / 4',day.total,day.water+' ml'][i],x,y+49,36,true)});
-    text('主食／蛋白質／蔬菜',M,y+142,22,false,'#819185');y+=185;
+  function rounded(x,yy,w,h,r,fill){ctx.beginPath();ctx.moveTo(x+r,yy);ctx.arcTo(x+w,yy,x+w,yy+h,r);ctx.arcTo(x+w,yy+h,x,yy+h,r);ctx.arcTo(x,yy+h,x,yy,r);ctx.arcTo(x,yy,x+w,yy,r);ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill()}}
+  function rule(yy){ctx.fillStyle=line;ctx.fillRect(M,yy,body,2)}
+  async function finish(){if(!c)return;rule(H-82);text('FOOD JOURNAL   /   '+current.date,M,H-61,19,false,muted);const n=String(pageNum).padStart(2,'0');font(20);text(n,W-M-ctx.measureText(n).width,H-61,20,false,muted);pages.push(await canvasJPEG(c));c.width=1;c.height=1;c=null}
+  function begin(day,continued=false){current=day;pageNum++;c=document.createElement('canvas');c.width=W;c.height=H;ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+   text('D A I L Y   F O O D   J O U R N A L',M,58,20,true,muted);text(day.label+(continued?'（續）':''),M,99,49,true);
+   rule(174);y=202;
+   if(!continued){rounded(M,y,body,128,21,sage);
+    const labels=['目標份量','實際份量','喝水量'],values=['3 / 3 / 4',day.total,day.water+' ml'];
+    labels.forEach((label,i)=>{const x=M+25+i*body/3;text(label,x,y+19,23,false,muted);text(values[i],x,y+58,36,true)});
+    text('主食 / 蛋白質 / 蔬菜',M+3,y+143,21,false,muted);y+=192;
    }
   }
   async function room(h){if(y+h>MAX){await finish();begin(current,true)}}
-  async function wrapped(t,size=28,bold=false,color='#344e3a'){for(const line of lines(t,W-2*M,size,bold)){await room(size+11);text(line,M,y,size,bold,color);y+=size+11}}
+  function picture(img,x,yy,w,h){ctx.save();rounded(x,yy,w,h,17,cream);ctx.clip();if(img){const ratio=Math.min(w/img.naturalWidth,h/img.naturalHeight),iw=img.naturalWidth*ratio,ih=img.naturalHeight*ratio;ctx.drawImage(img,x+(w-iw)/2,yy+(h-ih)/2,iw,ih)}else text('照片無法讀取',x+12,yy+18,21,false,muted);ctx.restore()}
+  async function groupTitle(name){await room(170);text(name,M,y,31,true);y+=43;rule(y);y+=15}
   for(const day of days){
-   begin(day);
-   let hasMeal=false;
-   for(const group of day.meals){if(!group.entries.length)continue;hasMeal=true;await room(84);text(group.name,M,y,34,true);y+=48;ctx.fillStyle='#dce6db';ctx.fillRect(M,y,W-2*M,2);y+=18;
+   begin(day);let hasMeal=false;
+   for(const group of day.meals){if(!group.entries.length)continue;hasMeal=true;await groupTitle(group.name);
     for(const meal of group.entries){
-     await room(84);await wrapped(meal.name,33,true);
-     for(const detail of meal.details)await wrapped(detail,26,false,'#607764');
-     const pics=meal.photos||[];
-     for(let i=0;i<pics.length;i+=3){
-      const imgs=await Promise.all(pics.slice(i,i+3).map(loadImage));const side=320,gap=18;
-      await room(side+18);
-      imgs.forEach((img,j)=>{const x=M+j*(side+gap);ctx.fillStyle='#f1f4ef';ctx.fillRect(x,y,side,side);if(img){const ratio=Math.min(side/img.naturalWidth,side/img.naturalHeight),w=img.naturalWidth*ratio,h=img.naturalHeight*ratio;ctx.drawImage(img,x+(side-w)/2,y+(side-h)/2,w,h)}else text('照片無法讀取',x+18,y+20,24,false,'#819185')});y+=side+18;
+     const photos=meal.photos||[],photoW=photos.length?272:0,tx=M+(photoW?photoW+31:0),tw=W-M-tx-10;
+     const titleLines=lines(meal.name,tw-20,32,true);
+     const detailLines=meal.details.flatMap(d=>lines(d,tw-20,25,false));
+     const all=[...titleLines.map(t=>({t,size:32,bold:true})),...detailLines.map(t=>({t,size:25,bold:false}))];
+     let index=0,photoIndex=0;
+     while(index<all.length||photoIndex<photos.length){
+      const first=index===0&&photoIndex===0;
+      const remaining=all.slice(index);
+      const take=[];let th=0;
+      for(const row of remaining){if(take.length&&th+row.size+12>340)break;take.push(row);th+=row.size+12}
+      const showPhoto=photoIndex<photos.length,rowH=Math.max(th+34,showPhoto?224:0,76);
+      await room(rowH+12);
+      rounded(M,y,body,rowH,20,cream);
+      if(showPhoto){const img=await loadImage(photos[photoIndex++]);picture(img,M+12,y+12,photoW-12,rowH-24)}
+      let yy=y+17;for(const r of take){text(r.t,tx+12,yy,r.size,r.bold,r.bold?ink:muted);yy+=r.size+12}index+=take.length;
+      if(!take.length&&showPhoto)text(meal.name.length>24?meal.name.slice(0,24)+'…':meal.name,tx+12,yy,24,true);
+      y+=rowH+12;
      }
-     y+=12;
-    }
+    }y+=15;
    }
-   if(!hasMeal)await wrapped('當日尚無餐點紀錄',27,false,'#819185');
-   await room(110);text('每日十項回報',M,y,34,true);y+=58;
-   for(const [k,v] of day.report){await wrapped(k+'：'+v,28,false,'#425b47')}
+   if(!hasMeal){await room(70);text('當日尚無餐點紀錄',M,y,26,false,muted);y+=65}
+   const cells=day.report.map(([k,v])=>({k,v:String(v)}));
+   const half=(body-18)/2;
+   const rows=[];for(let i=0;i<cells.length;i+=2){const pair=cells.slice(i,i+2).map(cell=>({...cell,ls:lines(cell.v,half-44,27,true)}));rows.push({pair,h:Math.max(93,...pair.map(cell=>48+cell.ls.length*36))})}
+   let reportStarted=false;
+   for(const {pair,h} of rows){
+    const needsHeader=!reportStarted||y+h>MAX;
+    if(needsHeader){await room(h+62);text(reportStarted?'每日十項回報（續）':'每日十項回報',M,y,32,true);y+=50;reportStarted=true}
+    await room(h+8);
+    pair.forEach((cell,i)=>{const x=M+i*(half+18);rounded(x,y,half,h,16,sage);text(cell.k,x+20,y+14,22,false,muted);cell.ls.forEach((v,j)=>text(v,x+20,y+43+j*36,27,true))});y+=h+8;
+   }
    await finish();
   }
   return pdfBlob(pages);
