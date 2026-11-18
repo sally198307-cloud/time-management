@@ -32,7 +32,7 @@ window.FoodJournalPDF = (function(){
  async function build(days){
   const pages=[];let c,ctx,y,current,pageNum=0;
   const ink='#303c31',muted='#686d65',line='#d9d8cf',paper='#fffdf8',accent='#6d7964',body=W-2*M;
-  const serif='"Songti TC","Noto Serif TC","PMingLiU",Georgia,serif';
+  const serif='"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
   const sans='"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
   function font(size,bold=false,face=sans){ctx.font=(bold?'600 ':'400 ')+size+'px '+face}
   function text(t,x,yy,size=27,bold=false,color=ink,face=sans){font(size,bold,face);ctx.fillStyle=color;ctx.textBaseline='top';ctx.fillText(String(t),x,yy)}
@@ -41,9 +41,9 @@ window.FoodJournalPDF = (function(){
   function rule(yy,x=M,w=body){ctx.fillStyle=line;ctx.fillRect(x,yy,w,1.5)}
   async function finish(){if(!c)return;rule(H-84);text('FOOD JOURNAL  /  '+current.date,M,H-61,19,false,muted,serif);right(String(pageNum).padStart(2,'0'),W-M,H-61,21,false,muted,serif);pages.push(await canvasJPEG(c));c.width=1;c.height=1;c=null}
   function begin(day,continued=false){current=day;pageNum++;c=document.createElement('canvas');c.width=W;c.height=H;ctx=c.getContext('2d');ctx.fillStyle=paper;ctx.fillRect(0,0,W,H);
-   text('F O O D   J O U R N A L',M,59,20,false,accent,serif);right('飲食紀錄',W-M,59,22,false,muted,serif);
-   const title=day.label+(continued?'（續）':'');let size=61;font(size,false,serif);while(size>28&&ctx.measureText(title).width>body){size-=2;font(size,false,serif)}
-   text(title,M,105,size,false,ink,serif);rule(188);y=219;
+   text('FOOD JOURNAL',M,59,20,false,accent,serif);right('飲食紀錄',W-M,59,22,false,muted,serif);
+   const title=day.label+(continued?'（續）':'');let size=51;font(size,false,serif);while(size>28&&ctx.measureText(title).width>body){size-=2;font(size,false,serif)}
+   text(title,M,105,size,true,ink,serif);rule(188);y=219;
    if(!continued){
     const vals=['3 / 3 / 4',day.total,day.water+' ml'],labels=['目標份量','實際份量','喝水量'];
     labels.forEach((l,i)=>{const x=M+i*body/3;const avail=body/3-22;let sz=39;font(sz,false,serif);while(sz>20&&ctx.measureText(vals[i]).width>avail){sz-=2;font(sz,false,serif)}text(l,x,y,23,false,muted);text(vals[i],x,y+36,sz,false,ink,serif)});
@@ -53,7 +53,7 @@ window.FoodJournalPDF = (function(){
   async function room(h){if(y+h>MAX){await finish();begin(current,true)}}
   function photoDims(img,width,limit){if(!img||!img.naturalWidth||!img.naturalHeight)return {w:width,h:Math.min(limit,180)};const factor=Math.min(width/img.naturalWidth,limit/img.naturalHeight);return {w:Math.round(img.naturalWidth*factor),h:Math.round(img.naturalHeight*factor)}}
   function drawPhoto(img,x,yy,w,h){if(img){ctx.drawImage(img,x,yy,w,h)}else{ctx.fillStyle='#efede7';ctx.fillRect(x,yy,w,h);text('照片無法讀取',x+12,yy+15,20,false,muted)}}
-  async function section(name,english,need=180){await room(need);text(name,M,y,33,false,ink,serif);right(english,W-M,y+9,20,false,accent,serif);y+=50;rule(y);y+=20}
+  async function section(name,english,need=180){await room(need);text(name,M,y,31,true,ink,serif);right(english,W-M,y+9,20,false,accent,serif);y+=50;rule(y);y+=20}
   const english={早餐:'BREAKFAST',午餐:'LUNCH',晚餐:'DINNER',點心:'SNACK'};
   for(const day of days){
    begin(day);let hasMeal=false,mealNo=0;
@@ -62,7 +62,7 @@ window.FoodJournalPDF = (function(){
     for(const meal of group.entries){
      const photos=meal.photos||[];const hasPhoto=photos.length>0;const column=hasPhoto?360:0;
      const gap=38,tw=body-(hasPhoto?column+gap:0);
-     const title=lines(meal.name,tw,33,false,serif).map(t=>({t,size:33,face:serif,color:ink}));
+     const title=lines(meal.name,tw,30,true,serif).map(t=>({t,size:30,face:serif,color:ink,bold:true}));
      const details=meal.details.flatMap(d=>lines(d,tw,26,false,sans)).map(t=>({t,size:26,face:sans,color:muted}));
      const all=[...title,...details];let idx=0,pi=0;const onLeft=mealNo++%2===0;
      while(idx<all.length||pi<photos.length){
@@ -72,7 +72,7 @@ window.FoodJournalPDF = (function(){
       await room(rowH+25);
       const tx=show?(onLeft?M+column+gap:M):M;
       if(show){const px=onLeft?M:W-M-column;drawPhoto(img,px+(column-dim.w)/2,y,dim.w,dim.h);pi++}
-      let yy=y;for(const r of take){text(r.t,tx,yy,r.size,false,r.color,r.face);yy+=r.size+11}idx+=take.length;
+      let yy=y;for(const r of take){text(r.t,tx,yy,r.size,!!r.bold,r.color,r.face);yy+=r.size+11}idx+=take.length;
       if(show&&!take.length){text('餐點照片 · '+pi+'/'+photos.length,tx,y,22,false,muted,serif)}
       y+=rowH+23;
      }
