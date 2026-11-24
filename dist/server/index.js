@@ -898,6 +898,28 @@ export default {
       return json({ ok: true, state: JSON.parse(version.state_json) });
     }
 
+    if (url.pathname === "/api/daily-task-status") {
+      const uid = userId(request, env);
+      if (!uid) return json({error:"未授權"},401);
+      if (request.method !== "POST") return json({error:"不支援的操作"},405);
+      let body; try { body = await request.json(); } catch { return json({error:"資料格式錯誤"},400); }
+      if(typeof body?.id!=="string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.date||"") || typeof body.done!=="boolean") return json({error:"缺少任務資料"},400);
+      for(let attempt=0;attempt<3;attempt++){
+        const row=await env.DB.prepare("SELECT state_json FROM user_state WHERE user_id = ?").bind(uid).first();
+        if(!row) return json({error:"找不到同步資料"},404);
+        const state=JSON.parse(row.state_json);
+        const task=(state.tasks||[]).find(t=>String(t.id)===body.id && t.owner!=="peizi");
+        if(!task) return json({error:"找不到任務"},404);
+        for(const item of [task,...(task.subtasks||[])]){
+          if(task.daily){const dates=new Set(item.completedDates||[]);if(body.done)dates.add(body.date);else dates.delete(body.date);item.completedDates=[...dates];}
+          else item.done=body.done;
+        }
+        if(!task.daily){if(body.done)task.journalCompletedOn=body.date;else delete task.journalCompletedOn;}
+        const result=await env.DB.prepare("UPDATE user_state SET state_json=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND state_json=?").bind(JSON.stringify(state),uid,row.state_json).run();
+        if(result.meta.changes){await env.DB.prepare("INSERT INTO state_versions (user_id,state_json,created_at) VALUES (?,?,CURRENT_TIMESTAMP)").bind(uid,row.state_json).run();return json({ok:true,tasks:state.tasks});}
+      }
+      return json({error:"資料已變更，請重試"},409);
+    }
     if (url.pathname !== "/api/state") return env.ASSETS.fetch(request);
 
     const uid = userId(request, env);
