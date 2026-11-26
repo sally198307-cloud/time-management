@@ -1,1 +1,1 @@
-{"name":"每日待辦","short_name":"每日待辦","id":"/daily-tasks.html","start_url":"/daily-tasks.html","display":"standalone","background_color":"#F8E7AD","theme_color":"#F8E7AD","icons":[{"src":"/daily-dog-icon.png","sizes":"180x180","type":"image/png"},{"src":"/daily-dog-icon.svg","sizes":"any","type":"image/svg+xml"}]}
+{"name":"每日待辦","short_name":"每日待辦","id":"/daily-tasks.html","start_url":"/daily-tasks.html","display":"standalone","background_color":"#F8E7AD","theme_color":"#F8E7AD","icons":[{"src":"/daily-puppy.png","sizes":"64x64","type":"image/png"}]}
